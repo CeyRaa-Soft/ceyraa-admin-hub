@@ -1,27 +1,33 @@
 export type SizeInfo = {
-    size: string;
-    quantity: number;
-    unitPrice: number;
+  size: string;
+  quantity: number;
+  unitPrice: number;
 };
 
 export type ColorVariant = {
-    id: string;
-    color: string;
-    sizes: SizeInfo[];
+  id: string;
+  color: string;
+  sizes: SizeInfo[];
 };
 
 export type OrderItem = {
-    id: string;
-    name: string;
-    variants: ColorVariant[];
+  id: string;
+  name: string;
+  variants: ColorVariant[];
 };
 
 export type Order = {
-    id: string;
-    supplier: string;
-    date: string;
-    status: "Pending" | "Approved" | "Delivered";
-    items: OrderItem[];
+  id: string;
+  supplier: string;
+  date: string;
+  status: "Pending" | "Approved" | "Delivered";
+  items: OrderItem[];
+};
+
+export type OrderCategory = {
+  id: string;
+  name: string;
+  items: OrderItem[];
 };
 
 export type Supplier = {
