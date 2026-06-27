@@ -10,60 +10,89 @@ import type { OrderItem, ColorVariant, SizeInfo } from "@/types/order";
 interface NewOrderItemProps {
     onSave: (newItem: OrderItem) => void;
     onCancel: () => void;
+    initialItem?: OrderItem;
 }
 
-export function NewOrderItem({ onSave, onCancel }: NewOrderItemProps) {
-    const [itemName, setItemName] = useState("");
-    const [variants, setVariants] = useState<Omit<ColorVariant, 'id'>[]>([]);
+export function NewOrderItem({ onSave, onCancel, initialItem }: NewOrderItemProps) {
+    const [itemName, setItemName] = useState(initialItem?.name || "");
+    const [variants, setVariants] = useState<Omit<ColorVariant, 'id'>[]>(
+        initialItem?.variants.map(({ id, ...v }) => v) || []
+    );
 
     const handleAddVariant = () => {
         setVariants([...variants, { color: "", sizes: [] }]);
     };
 
     const handleVariantChange = (index: number, field: 'color', value: any) => {
-        const newVariants = [...variants];
-        newVariants[index] = { ...newVariants[index], [field]: value };
-        setVariants(newVariants);
+        setVariants(prev => prev.map((variant, idx) => {
+            if (idx === index) {
+                return { ...variant, [field]: value };
+            }
+            return variant;
+        }));
     };
 
     const handleRemoveVariant = (index: number) => {
-        const newVariants = variants.filter((_, i) => i !== index);
-        setVariants(newVariants);
+        setVariants(prev => prev.filter((_, i) => i !== index));
     };
 
     const handleAddSize = (variantIndex: number) => {
-        const newVariants = [...variants];
-        newVariants[variantIndex].sizes.push({ size: "", quantity: 0, unitPrice: 0 });
-        setVariants(newVariants);
+        setVariants(prev => prev.map((variant, vIdx) => {
+            if (vIdx === variantIndex) {
+                return {
+                    ...variant,
+                    sizes: [...variant.sizes, { size: "", quantity: 0, unitPrice: 0 }]
+                };
+            }
+            return variant;
+        }));
     };
 
     const handleSizeChange = (variantIndex: number, sizeIndex: number, field: keyof SizeInfo, value: any) => {
-        const newVariants = [...variants];
-        const newSizes = [...newVariants[variantIndex].sizes];
-        if (field === 'quantity' || field === 'unitPrice') {
-            newSizes[sizeIndex] = { ...newSizes[sizeIndex], [field]: parseFloat(value) || 0 };
-        } else {
-            newSizes[sizeIndex] = { ...newSizes[sizeIndex], [field]: value };
-        }
-        newVariants[variantIndex].sizes = newSizes;
-        setVariants(newVariants);
+        setVariants(prev => prev.map((variant, vIdx) => {
+            if (vIdx === variantIndex) {
+                return {
+                    ...variant,
+                    sizes: variant.sizes.map((size, sIdx) => {
+                        if (sIdx === sizeIndex) {
+                            return {
+                                ...size,
+                                [field]: (field === 'quantity' || field === 'unitPrice')
+                                    ? (parseFloat(value) || 0)
+                                    : value
+                            };
+                        }
+                        return size;
+                    })
+                };
+            }
+            return variant;
+        }));
     };
     
     const handleRemoveSize = (variantIndex: number, sizeIndex: number) => {
-        const newVariants = [...variants];
-        newVariants[variantIndex].sizes = newVariants[variantIndex].sizes.filter((_, i) => i !== sizeIndex);
-        setVariants(newVariants);
+        setVariants(prev => prev.map((variant, vIdx) => {
+            if (vIdx === variantIndex) {
+                return {
+                    ...variant,
+                    sizes: variant.sizes.filter((_, i) => i !== sizeIndex)
+                };
+            }
+            return variant;
+        }));
     };
 
     const handleSave = () => {
         if (!itemName.trim()) {
-            // Maybe show a toast or error message
             return;
         }
         const newItem: OrderItem = {
-            id: `item-${Date.now()}`,
+            id: initialItem?.id || `item-${Date.now()}`,
             name: itemName,
-            variants: variants.map((v, i) => ({ ...v, id: `variant-${Date.now()}-${i}` })),
+            variants: variants.map((v, i) => ({
+                ...v,
+                id: (v as any).id || `variant-${Date.now()}-${i}`
+            })),
         };
         onSave(newItem);
     };

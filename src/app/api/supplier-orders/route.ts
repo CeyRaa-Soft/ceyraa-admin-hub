@@ -45,7 +45,8 @@ export async function POST(req: Request) {
     if (!orderData.categories || orderData.categories.length === 0) {
       orderData.categories = [
         { id: "production", name: "Sewing & Tailoring (Garments)", items: [] },
-        { id: "supplies", name: "Fabrics & Accessories (Materials)", items: [] }
+        { id: "supplies", name: "Fabrics & Accessories (Materials)", items: [] },
+        { id: "other", name: "Other Expenses (Courier, Packaging, etc.)", items: [] }
       ];
     }
 

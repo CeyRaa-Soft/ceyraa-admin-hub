@@ -64,11 +64,12 @@ export const OrderAccordionItem: React.FC<OrderAccordionItemProps> = ({
   const [localCategories, setLocalCategories] = useState<OrderCategory[]>(categories);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-  // Sync with parent properties updates
+  // Sync with parent properties updates only when there are no unsaved changes
   useEffect(() => {
-    setLocalCategories(categories);
-    setHasUnsavedChanges(false);
-  }, [categories]);
+    if (!hasUnsavedChanges) {
+      setLocalCategories(categories);
+    }
+  }, [categories, hasUnsavedChanges]);
 
   const getOrderTotal = () => {
     let total = 0;
@@ -87,6 +88,7 @@ export const OrderAccordionItem: React.FC<OrderAccordionItemProps> = ({
   const getCategoryDisplayName = (catId: string, originalName: string) => {
     if (catId === "production") return "Sewing & Tailoring (Garments)";
     if (catId === "supplies") return "Fabrics & Accessories (Materials)";
+    if (catId === "other") return "Other Expenses (Courier, Packaging, etc.)";
     return originalName;
   };
 
@@ -112,6 +114,38 @@ export const OrderAccordionItem: React.FC<OrderAccordionItemProps> = ({
     setHasUnsavedChanges(true);
   };
 
+  const handleUpdateItemLocal = (categoryId: string, updatedItem: OrderItem) => {
+    setLocalCategories((prev) =>
+      prev.map((cat) => {
+        if (cat.id === categoryId) {
+          return {
+            ...cat,
+            items: cat.items.map((item) =>
+              item.id === updatedItem.id ? updatedItem : item
+            ),
+          };
+        }
+        return cat;
+      })
+    );
+    setHasUnsavedChanges(true);
+  };
+
+  const handleDeleteItemLocal = (categoryId: string, itemId: string) => {
+    setLocalCategories((prev) =>
+      prev.map((cat) => {
+        if (cat.id === categoryId) {
+          return {
+            ...cat,
+            items: cat.items.filter((item) => item.id !== itemId),
+          };
+        }
+        return cat;
+      })
+    );
+    setHasUnsavedChanges(true);
+  };
+
   return (
     <AccordionItem
       value={order.id}
@@ -123,14 +157,16 @@ export const OrderAccordionItem: React.FC<OrderAccordionItemProps> = ({
           <div className="flex flex-[1.5] items-center gap-2 text-left">
             <span className="font-semibold">{order.supplier}</span>
             {supplierId && (
-              <Link
-                href={`/suppliers/${supplierId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(`/suppliers/${supplierId}`, "_blank", "noopener,noreferrer");
+                }}
+                className="inline-flex items-center justify-center cursor-pointer text-muted-foreground hover:text-primary transition-colors p-1"
+                title="View Supplier Details"
               >
-                <ExternalLink className="h-4 w-4 text-muted-foreground hover:text-primary transition-colors" />
-              </Link>
+                <ExternalLink className="h-4 w-4" />
+              </span>
             )}
           </div>
           <div className="flex-1 text-left hidden md:block">{order.date}</div>
@@ -212,6 +248,12 @@ export const OrderAccordionItem: React.FC<OrderAccordionItemProps> = ({
                       setAddingItemToCategoryId(null);
                     }}
                     onCancelNewItem={() => setAddingItemToCategoryId(null)}
+                    onUpdateItem={(updatedItem) => {
+                      handleUpdateItemLocal(category.id, updatedItem);
+                    }}
+                    onDeleteItem={(itemId) => {
+                      handleDeleteItemLocal(category.id, itemId);
+                    }}
                   />
                 </AccordionContent>
                 </AccordionItem>

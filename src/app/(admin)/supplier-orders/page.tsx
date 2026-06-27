@@ -121,6 +121,7 @@ export default function SupplierOrdersPage() {
         categories: [
           { id: "production", name: "Sewing & Tailoring (Garments)", items: [] },
           { id: "supplies", name: "Fabrics & Accessories (Materials)", items: [] },
+          { id: "other", name: "Other Expenses (Courier, Packaging, etc.)", items: [] },
         ],
       };
 
