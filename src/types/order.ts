@@ -22,6 +22,17 @@ export type Order = {
   date: string;
   status: "Pending" | "Approved" | "Delivered";
   items: OrderItem[];
+  type?: "default" | "template";
+  categories?: OrderCategory[];
+  defaultSummary?: {
+    totalCost: number;
+    clothes: {
+      fabric: string;
+      amount: number;
+      unit: "Yards" | "Meters" | "Kgs";
+    }[];
+  };
+  createdAt?: string;
 };
 
 export type OrderCategory = {
