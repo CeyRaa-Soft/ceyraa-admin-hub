@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { supplierService } from "@/services/supplier.service";
+import type { Supplier } from "@/types/order";
 
 export function useSuppliers() {
-  const [suppliers, setSuppliers] = useState([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadSuppliers = async () => {

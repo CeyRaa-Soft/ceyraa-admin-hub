@@ -33,9 +33,11 @@ export type OrderCategory = {
 export type Supplier = {
   id: string;
   name: string;
-  category: string;
-  address: string;
-  phone: string;
-  bankDetails: string;
+  category?: string;
+  address?: string;
+  phone?: string;
+  bankDetails?: string;
   description?: string;
+  notes?: string[];
+  createdAt?: string;
 };

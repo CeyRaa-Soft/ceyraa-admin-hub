@@ -1,37 +1,17 @@
+import apiClient from "@/lib/api-client";
+import type { Supplier } from "@/types/order";
+
 export const supplierService = {
-  getAll: async () => {
-    const response = await fetch("/api/suppliers");
+  getAll: () => apiClient.get<Supplier[]>("/api/suppliers"),
 
-    if (!response.ok) {
-      throw new Error("Failed to load suppliers");
-    }
+  getById: (id: string) => apiClient.get<Supplier>(`/api/suppliers/${id}`),
 
-    return response.json();
-  },
+  create: (payload: Omit<Supplier, "id">) =>
+    apiClient.post<Supplier>("/api/suppliers", payload),
 
-  getById: async (id: string) => {
-    const response = await fetch(`/api/suppliers/${id}`);
+  update: (id: string, payload: Partial<Supplier>) =>
+    apiClient.put<Supplier>(`/api/suppliers/${id}`, payload),
 
-    if (!response.ok) {
-      throw new Error("Failed to load supplier");
-    }
-
-    return response.json();
-  },
-
-  create: async (payload: any) => {
-    const response = await fetch("/api/suppliers", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      throw new Error("Failed to create supplier");
-    }
-
-    return response.json();
-  },
+  delete: (id: string) =>
+    apiClient.delete<{ success: boolean }>(`/api/suppliers/${id}`),
 };

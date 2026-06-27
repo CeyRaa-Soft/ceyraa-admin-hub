@@ -12,7 +12,11 @@ if (process.env.NODE_ENV === "development") {
 
   if (!globalWithMongo._mongoClientPromise) {
     client = new MongoClient(uri);
-    globalWithMongo._mongoClientPromise = client.connect();
+    globalWithMongo._mongoClientPromise = client.connect().catch((err) => {
+      // Clear the cache on failure so we attempt connection again next time
+      delete globalWithMongo._mongoClientPromise;
+      throw err;
+    });
   }
 
   clientPromise = globalWithMongo._mongoClientPromise;
