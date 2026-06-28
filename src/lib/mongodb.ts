@@ -9,7 +9,7 @@ if (!uri) {
   // Prevent build-time crashes when MONGODB_URI is not set in the build context.
   // It returns a rejected promise that will fail gracefully if called.
   clientPromise = Promise.reject(
-    new Error("Please define the MONGODB_URI environment variable inside .env")
+    new Error("Please define the MONGODB_URI environment variable inside .env"),
   );
   // Catch the rejection immediately to avoid UnhandledPromiseRejectionWarning during build
   clientPromise.catch(() => {});
