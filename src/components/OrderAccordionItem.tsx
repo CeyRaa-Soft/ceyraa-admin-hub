@@ -27,6 +27,8 @@ import Link from "next/link";
 import { OrderItemsTable } from "@/components/OrderItemsTable";
 import type { Order, OrderCategory, OrderItem } from "@/types/order";
 import { calculateItemsSubTotal } from "@/lib/orderCalculations";
+import { GarmentItemsSummaryTable } from "@/components/GarmentItemsSummaryTable";
+
 
 type OrderAccordionItemProps = {
   order: Order;
@@ -36,6 +38,7 @@ type OrderAccordionItemProps = {
   onEdit?: (order: Order) => void;
   onDelete?: (order: Order) => void;
   onSaveChanges?: (orderId: string, updatedCategories: OrderCategory[]) => void;
+  onAddToInventory?: (order: Order) => void;
 };
 
 const statusVariant: Record<
@@ -55,6 +58,7 @@ export const OrderAccordionItem: React.FC<OrderAccordionItemProps> = ({
   onEdit,
   onDelete,
   onSaveChanges,
+  onAddToInventory,
 }) => {
   const [addingItemToCategoryId, setAddingItemToCategoryId] = useState<
     string | null
@@ -188,12 +192,18 @@ export const OrderAccordionItem: React.FC<OrderAccordionItemProps> = ({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => onApprove?.(order)}
-                disabled={order.status !== "Pending" || hasUnsavedChanges}
-                title={hasUnsavedChanges ? "Please save changes before approving" : undefined}
+                onClick={() => onAddToInventory?.(order)}
+                disabled={order.status === "Delivered" || (order as any).addedToInventory || hasUnsavedChanges}
+                title={
+                  (order as any).addedToInventory
+                    ? "Already added to inventory"
+                    : hasUnsavedChanges
+                    ? "Please save changes before converting"
+                    : "Add these items to your inventory"
+                }
               >
                 <CheckCircle2 className="mr-2 h-4 w-4 text-emerald-500" />
-                Approve & Add to Inventory
+                {(order as any).addedToInventory ? "Added to Inventory" : "Confirm & Add to Inventory"}
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

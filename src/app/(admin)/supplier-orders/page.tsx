@@ -33,6 +33,7 @@ import { OrderAccordionItem } from "@/components/OrderAccordionItem";
 import type { Order, OrderItem } from "@/types/order";
 import { orderService } from "@/services/order.service";
 import { supplierService } from "@/services/supplier.service";
+import { AddToInventoryDialog } from "@/components/AddToInventoryDialog";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { useToast } from "@/hooks/use-toast";
 
@@ -60,6 +61,11 @@ export default function SupplierOrdersPage() {
   // Errors
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [errorDetails, setErrorDetails] = useState<any>(null);
+
+  // Add to Inventory dialog states
+  const [inventoryOrder, setInventoryOrder] = useState<Order | null>(null);
+  const [isInventoryDialogOpen, setIsInventoryDialogOpen] = useState(false);
+
 
   const loadData = async () => {
     try {
@@ -279,6 +285,10 @@ export default function SupplierOrdersPage() {
                     onEdit={handleEditOrderClick}
                     onDelete={handleDeleteOrder}
                     onSaveChanges={handleSaveChanges}
+                    onAddToInventory={(ord) => {
+                      setInventoryOrder(ord);
+                      setIsInventoryDialogOpen(true);
+                    }}
                   />
                 ))}
               </Accordion>
@@ -291,7 +301,7 @@ export default function SupplierOrdersPage() {
           open={isCreateOrderDialogOpen}
           onOpenChange={handleOpenCreateDialogOpen}
         >
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
             <DialogHeader>
               <DialogTitle>Create New Supplier Order</DialogTitle>
               <DialogDescription>
@@ -362,7 +372,7 @@ export default function SupplierOrdersPage() {
           open={isEditOrderDialogOpen}
           onOpenChange={setIsEditOrderDialogOpen}
         >
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
             <DialogHeader>
               <DialogTitle>Edit Order Details</DialogTitle>
               <DialogDescription>
@@ -424,6 +434,14 @@ export default function SupplierOrdersPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Add to Inventory Dialog */}
+        <AddToInventoryDialog
+          open={isInventoryDialogOpen}
+          onOpenChange={setIsInventoryDialogOpen}
+          order={inventoryOrder}
+          onSuccess={loadData}
+        />
       </div>
     </OrderTotalsProvider>
   );

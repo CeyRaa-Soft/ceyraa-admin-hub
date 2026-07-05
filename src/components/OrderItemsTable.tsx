@@ -32,6 +32,8 @@ import {
   calculateItemsSubTotal,
 } from "@/lib/orderCalculations";
 import { NewOrderItem } from "@/components/new-order-item";
+import { GarmentItemsSummaryTable } from "@/components/GarmentItemsSummaryTable";
+
 
 type OrderItemsTableProps = {
   categoryId: string;
@@ -253,44 +255,7 @@ export const OrderItemsTable: React.FC<OrderItemsTableProps> = ({
                     </div>
                   </div>
                   <AccordionContent className="px-4 pb-4 pt-2">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="hover:bg-transparent">
-                          <TableHead>Color</TableHead>
-                          <TableHead>Size</TableHead>
-                          <TableHead className="text-right">Quantity</TableHead>
-                          <TableHead className="text-right">Unit Price</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {item.variants.map((variant) => (
-                          <React.Fragment key={variant.id}>
-                            {variant.sizes.map((size, sizeIndex) => (
-                              <TableRow
-                                key={`${variant.id}-${size.size}`}
-                                className="hover:bg-transparent"
-                              >
-                                {sizeIndex === 0 && (
-                                  <TableCell
-                                    rowSpan={variant.sizes.length}
-                                    className="align-top font-medium"
-                                  >
-                                    {variant.color}
-                                  </TableCell>
-                                )}
-                                <TableCell>{size.size}</TableCell>
-                                <TableCell className="text-right">
-                                  {size.quantity}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  ${size.unitPrice.toFixed(2)}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </React.Fragment>
-                        ))}
-                      </TableBody>
-                    </Table>
+                    <GarmentItemsSummaryTable variants={item.variants} showPrice={true} />
                   </AccordionContent>
                 </AccordionItem>
               );
