@@ -26,8 +26,9 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Upload, X, Check, Image as ImageIcon, AlertCircle } from "lucide-react";
+import { Loader2, Upload, X, Check, Image as ImageIcon, AlertCircle, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import Link from "next/link";
 import { inventoryService } from "@/services/inventory.service";
 import type { Order, OrderItem } from "@/types/order";
 import type { DressCategory, Design, DesignImage } from "@/types/inventory";
@@ -78,14 +79,13 @@ export function AddToInventoryDialog({
           const cats = await inventoryService.getAllCategories();
           setCategories(cats);
           
-          // Pre-populate empty mappings for each garment item
+          // Pre-populate empty mappings for each garment item (user must select category first)
           if (garmentItems.length > 0) {
-            const defaultCatId = cats[0]?.id || "";
             const initialMappings = garmentItems.map((item) => {
               return {
                 orderItemId: item.id,
                 action: "create" as const,
-                categoryId: defaultCatId,
+                categoryId: "",
                 designId: "",
                 name: item.name,
                 code: "",
@@ -93,11 +93,6 @@ export function AddToInventoryDialog({
               };
             });
             setMappings(initialMappings);
-
-            // Fetch designs for the default category
-            if (defaultCatId) {
-              fetchDesignsForCategory(defaultCatId);
-            }
           }
         } catch (err: any) {
           console.error(err);
@@ -379,16 +374,16 @@ export function AddToInventoryDialog({
                     </AccordionTrigger>
                     <AccordionContent className="px-5 pb-5 pt-3 space-y-4 border-t border-border/40 bg-muted/5">
                       
-                      {/* Mapping Setup */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-1.5">
+                      {/* Category Selection Row */}
+                      <div className="p-4 border border-dashed rounded-xl bg-card border-border/60 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                        <div className="space-y-1.5 w-full md:max-w-xs">
                           <Label className="text-xs font-semibold">Dress Category</Label>
                           <Select
                             value={mapping.categoryId}
                             onValueChange={(val) => handleCategoryChange(item.id, val)}
                           >
                             <SelectTrigger className="h-9">
-                              <SelectValue placeholder="Select Category" />
+                              <SelectValue placeholder="Select Dress Category" />
                             </SelectTrigger>
                             <SelectContent>
                               {categories.map((c) => (
@@ -399,152 +394,173 @@ export function AddToInventoryDialog({
                             </SelectContent>
                           </Select>
                         </div>
-
-                        <div className="space-y-1.5">
-                          <Label className="text-xs font-semibold">Action</Label>
-                          <Select
-                            value={mapping.action}
-                            onValueChange={(val: "create" | "merge") => handleActionChange(item.id, val)}
-                          >
-                            <SelectTrigger className="h-9">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="create">Create New Design</SelectItem>
-                              <SelectItem value="merge">Link to Existing Design</SelectItem>
-                            </SelectContent>
-                          </Select>
+                        <div className="text-xs text-muted-foreground flex items-center gap-2 bg-muted/40 p-3 rounded-lg border border-border/60">
+                          <Info className="h-4.5 w-4.5 text-primary shrink-0" />
+                          <span>
+                            Need a new category? Go to the{" "}
+                            <Link href="/inventory" className="text-primary hover:underline font-semibold">
+                              Inventory Page
+                            </Link>{" "}
+                            to create it first. (You cannot create categories in this modal).
+                          </span>
                         </div>
-
-                        {mapping.action === "create" ? (
-                          <div className="space-y-1.5">
-                            <Label className="text-xs font-semibold">New Design Name</Label>
-                            <Input
-                              value={mapping.name}
-                              onChange={(e) => handleMappingFieldChange(item.id, "name", e.target.value)}
-                              className="h-9"
-                            />
-                          </div>
-                        ) : (
-                          <div className="space-y-1.5">
-                            <Label className="text-xs font-semibold">Select Existing Design</Label>
-                            <Select
-                              value={mapping.designId}
-                              onValueChange={(val) => handleMappingFieldChange(item.id, "designId", val)}
-                            >
-                              <SelectTrigger className="h-9">
-                                <SelectValue placeholder="Select Design" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {categoryDesigns.map((d) => (
-                                  <SelectItem key={d.id} value={d.id}>
-                                    {d.name} ({d.code})
-                                  </SelectItem>
-                                ))}
-                                {categoryDesigns.length === 0 && (
-                                  <SelectItem value="_empty" disabled>
-                                    No designs in this category
-                                  </SelectItem>
-                                )}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
                       </div>
 
-                      {/* Display Quantities Summary */}
-                      <div className="text-xs bg-muted/20 border border-border/40 rounded-lg p-3">
-                        <span className="font-semibold text-muted-foreground block mb-1">Items to Add:</span>
-                        <div className="flex flex-wrap gap-2">
-                          {item.variants.map((v) => (
-                            <div key={v.color} className="bg-background border rounded px-2.5 py-1 text-foreground/80 font-mono">
-                              <span className="font-semibold text-primary">{v.color}</span>:{" "}
-                              {v.sizes.map((s) => `${s.size} (${s.quantity}pcs)`).join(", ")}
+                      {mapping.categoryId ? (
+                        <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                          {/* Mapping Setup (Action & Design Selection) */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-border/40 pt-4">
+                            <div className="space-y-1.5">
+                              <Label className="text-xs font-semibold">Action</Label>
+                              <Select
+                                value={mapping.action}
+                                onValueChange={(val: "create" | "merge") => handleActionChange(item.id, val)}
+                              >
+                                <SelectTrigger className="h-9">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="create">Create New Design</SelectItem>
+                                  <SelectItem value="merge">Link to Existing Design</SelectItem>
+                                </SelectContent>
+                              </Select>
                             </div>
-                          ))}
-                        </div>
-                      </div>
 
-                      {/* Image Upload per Color */}
-                      <div className="space-y-3 pt-2">
-                        <Label className="text-xs font-semibold block">Upload Photos for Design Library (1-3 per color)</Label>
-                        <div className="space-y-3">
-                          {item.variants
-                            .filter((v) => v.color.trim() !== "")
-                            .map((variant) => {
-                              const colorKey = variant.color.trim();
-                              const uploadKey = `${item.id}-${colorKey}`;
-                              const colorImages = mapping.images.filter(
-                                (img) => img.color.trim().toLowerCase() === colorKey.toLowerCase()
-                              );
-
-                            return (
-                              <div key={variant.color} className="p-3 border rounded-xl bg-card border-border/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm">
-                                <span className="font-semibold text-xs text-muted-foreground min-w-[100px]">
-                                  Color: <span className="text-primary font-bold">{colorKey}</span>
-                                </span>
-
-                                <div className="flex flex-wrap items-center gap-3">
-                                  {/* Thumbnail list */}
-                                  {colorImages.map((img, imgIdx) => {
-                                    // Get original index in complete images array to remove
-                                    const origIdx = mapping.images.findIndex((i) => i.url === img.url);
-                                    return (
-                                      <div key={imgIdx} className="relative w-12 h-12 rounded-lg overflow-hidden border border-border/60">
-                                        <Image
-                                          src={img.url}
-                                          alt={`${colorKey} photo`}
-                                          fill
-                                          sizes="48px"
-                                          className="object-cover"
-                                        />
-                                        <button
-                                          type="button"
-                                          onClick={() => handleRemoveImage(item.id, origIdx)}
-                                          className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-black/75 hover:bg-black text-white flex items-center justify-center"
-                                        >
-                                          <X className="h-2.5 w-2.5" />
-                                        </button>
-                                      </div>
-                                    );
-                                  })}
-
-                                  {/* Upload Button */}
-                                  {colorImages.length < 3 && (
-                                    <div className="relative">
-                                      <input
-                                        type="file"
-                                        accept="image/*"
-                                        multiple
-                                        id={`file-${item.id}-${colorKey}`}
-                                        className="hidden"
-                                        onChange={(e) => handleImageUpload(item.id, colorKey, e)}
-                                        disabled={uploadingColors[uploadKey]}
-                                      />
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        asChild
-                                        disabled={uploadingColors[uploadKey]}
-                                        className="h-8 py-0 px-2.5"
-                                      >
-                                        <label htmlFor={`file-${item.id}-${colorKey}`} className="cursor-pointer flex items-center gap-1">
-                                          {uploadingColors[uploadKey] ? (
-                                            <Loader2 className="h-3 w-3 animate-spin" />
-                                          ) : (
-                                            <Upload className="h-3 w-3" />
-                                          )}
-                                          Upload Photo ({colorImages.length}/3)
-                                        </label>
-                                      </Button>
-                                    </div>
-                                  )}
-                                </div>
+                            {mapping.action === "create" ? (
+                              <div className="space-y-1.5">
+                                <Label className="text-xs font-semibold">New Design Name</Label>
+                                <Input
+                                  value={mapping.name}
+                                  onChange={(e) => handleMappingFieldChange(item.id, "name", e.target.value)}
+                                  className="h-9"
+                                />
                               </div>
-                            );
-                          })}
+                            ) : (
+                              <div className="space-y-1.5">
+                                <Label className="text-xs font-semibold">Select Existing Design</Label>
+                                <Select
+                                  value={mapping.designId}
+                                  onValueChange={(val) => handleMappingFieldChange(item.id, "designId", val)}
+                                >
+                                  <SelectTrigger className="h-9">
+                                    <SelectValue placeholder="Select Design" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {categoryDesigns.map((d) => (
+                                      <SelectItem key={d.id} value={d.id}>
+                                        {d.name} ({d.code})
+                                      </SelectItem>
+                                    ))}
+                                    {categoryDesigns.length === 0 && (
+                                      <SelectItem value="_empty" disabled>
+                                        No designs in this category
+                                      </SelectItem>
+                                    )}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Display Quantities Summary */}
+                          <div className="text-xs bg-muted/20 border border-border/40 rounded-lg p-3">
+                            <span className="font-semibold text-muted-foreground block mb-1">Items to Add:</span>
+                            <div className="flex flex-wrap gap-2">
+                              {item.variants.map((v) => (
+                                <div key={v.color} className="bg-background border rounded px-2.5 py-1 text-foreground/80 font-mono">
+                                  <span className="font-semibold text-primary">{v.color}</span>:{" "}
+                                  {v.sizes.map((s) => `${s.size} (${s.quantity}pcs)`).join(", ")}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Image Upload per Color */}
+                          <div className="space-y-3 pt-2">
+                            <Label className="text-xs font-semibold block">Upload Photos for Design Library (1-3 per color)</Label>
+                            <div className="space-y-3">
+                              {item.variants
+                                .filter((v) => v.color.trim() !== "")
+                                .map((variant) => {
+                                  const colorKey = variant.color.trim();
+                                  const uploadKey = `${item.id}-${colorKey}`;
+                                  const colorImages = mapping.images.filter(
+                                    (img) => img.color.trim().toLowerCase() === colorKey.toLowerCase()
+                                  );
+
+                                  return (
+                                    <div key={variant.color} className="p-3 border rounded-xl bg-card border-border/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm">
+                                      <span className="font-semibold text-xs text-muted-foreground min-w-[100px]">
+                                        Color: <span className="text-primary font-bold">{colorKey}</span>
+                                      </span>
+
+                                      <div className="flex flex-wrap items-center gap-3">
+                                        {/* Thumbnail list */}
+                                        {colorImages.map((img, imgIdx) => {
+                                          // Get original index in complete images array to remove
+                                          const origIdx = mapping.images.findIndex((i) => i.url === img.url);
+                                          return (
+                                            <div key={imgIdx} className="relative w-12 h-12 rounded-lg overflow-hidden border border-border/60">
+                                              <Image
+                                                src={img.url}
+                                                alt={`${colorKey} photo`}
+                                                fill
+                                                sizes="48px"
+                                                className="object-cover"
+                                              />
+                                              <button
+                                                type="button"
+                                                onClick={() => handleRemoveImage(item.id, origIdx)}
+                                                className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-black/75 hover:bg-black text-white flex items-center justify-center"
+                                              >
+                                                <X className="h-2.5 w-2.5" />
+                                              </button>
+                                            </div>
+                                          );
+                                        })}
+
+                                        {/* Upload Button */}
+                                        {colorImages.length < 3 && (
+                                          <div className="relative">
+                                            <input
+                                              type="file"
+                                              accept="image/*"
+                                              multiple
+                                              id={`file-${item.id}-${colorKey}`}
+                                              className="hidden"
+                                              onChange={(e) => handleImageUpload(item.id, colorKey, e)}
+                                              disabled={uploadingColors[uploadKey]}
+                                            />
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              asChild
+                                              disabled={uploadingColors[uploadKey]}
+                                              className="h-8 py-0 px-2.5"
+                                            >
+                                              <label htmlFor={`file-${item.id}-${colorKey}`} className="cursor-pointer flex items-center gap-1">
+                                                {uploadingColors[uploadKey] ? (
+                                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                                ) : (
+                                                  <Upload className="h-3 w-3" />
+                                                )}
+                                                Upload Photo ({colorImages.length}/3)
+                                              </label>
+                                            </Button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                            </div>
+                          </div>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="text-center py-6 text-sm text-muted-foreground italic border border-dashed border-border/80 rounded-xl bg-card/40">
+                          Please select a category above to configure design details and upload photos.
+                        </div>
+                      )}
                     </AccordionContent>
                   </AccordionItem>
                 );

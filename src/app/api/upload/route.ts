@@ -13,6 +13,8 @@ export async function POST(req: Request) {
     const { searchParams } = new URL(req.url);
     const designCode = searchParams.get("designCode") || "item";
     const color = searchParams.get("color") || "color";
+    const folderParam = searchParams.get("folder") || "ceyraa";
+    const orderId = searchParams.get("orderId") || "order";
 
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
@@ -24,28 +26,48 @@ export async function POST(req: Request) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Clean naming components (alphanumeric and dashes/underscores only)
-    const cleanCode = designCode.replace(/[^a-zA-Z0-9_-]/g, "").toUpperCase();
-    const cleanColor = color.replace(/[^a-zA-Z0-9_-]/g, "");
-    const publicId = `design_${cleanCode}_${cleanColor}_${Date.now()}`;
+    let folder = "ceyraa";
+    let publicId = "";
+    let transformation: any[] = [];
+
+    if (folderParam === "stages") {
+      folder = "ceyraa_stages";
+      const cleanOrderId = orderId.replace(/[^a-zA-Z0-9_-]/g, "");
+      publicId = `stage_${cleanOrderId}_${Date.now()}`;
+      transformation = [
+        {
+          width: 2000,
+          height: 2000,
+          crop: "limit", // Preserve aspect ratio, only shrink if exceeds 2000px
+          quality: "auto",
+        },
+      ];
+    } else {
+      // Default Garment Inventory upload
+      folder = "ceyraa";
+      const cleanCode = designCode.replace(/[^a-zA-Z0-9_-]/g, "").toUpperCase();
+      const cleanColor = color.replace(/[^a-zA-Z0-9_-]/g, "");
+      publicId = `design_${cleanCode}_${cleanColor}_${Date.now()}`;
+      transformation = [
+        {
+          width: 1200,
+          height: 1500,
+          crop: "fill",
+          gravity: "auto",
+          quality: "auto",
+        },
+      ];
+    }
 
     // Upload image to Cloudinary using stream with auto transformations
     const uploadResult: any = await new Promise((resolve, reject) => {
       cloudinary.uploader.upload_stream(
         {
-          folder: "ceyraa",
+          folder: folder,
           public_id: publicId,
           resource_type: "image",
           format: "webp", // Force WebP storage
-          transformation: [
-            {
-              width: 1200,
-              height: 1500,
-              crop: "fill", // Crop to match aspect ratio
-              gravity: "auto", // Focus on main elements (person/garment)
-              quality: "auto", // Automatically optimize compression
-            },
-          ],
+          transformation: transformation,
         },
         (error, result) => {
           if (error) {
