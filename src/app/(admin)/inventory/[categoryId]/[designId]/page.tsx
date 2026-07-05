@@ -20,6 +20,8 @@ import {
   Camera,
   Shirt,
   Image as ImageIcon,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
@@ -28,6 +30,7 @@ import type { DressCategory, Design, DesignImage } from "@/types/inventory";
 import { GarmentItemsSummaryTable } from "@/components/GarmentItemsSummaryTable";
 import { DesignEditorForm } from "@/components/DesignEditorForm";
 import Image from "next/image";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 interface DesignDetailPageProps {
   params: Promise<{ categoryId: string; designId: string }>;
@@ -49,6 +52,9 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
   
   // Image uploading states
   const [uploadingColors, setUploadingColors] = useState<Record<string, boolean>>({});
+
+  // Lightbox gallery state
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   const loadData = async () => {
     try {
@@ -317,7 +323,8 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
                         {colorImages.map((img) => (
                           <div
                             key={img.url}
-                            className="relative group aspect-[3/4] rounded-xl overflow-hidden border border-border/80 bg-muted/20 shadow-sm"
+                            className="relative group aspect-[3/4] rounded-xl overflow-hidden border border-border/80 bg-muted/20 shadow-sm cursor-zoom-in"
+                            onClick={() => setLightboxIndex(img.originalIndex)}
                           >
                             <Image
                               src={img.url}
@@ -330,8 +337,12 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
                               <Button
                                 variant="destructive"
                                 size="icon"
+                                type="button"
                                 className="h-7 w-7 rounded-full ml-auto shadow-md"
-                                onClick={() => handleRemoveImage(img.originalIndex)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemoveImage(img.originalIndex);
+                                }}
                                 title="Delete photo"
                               >
                                 <X className="h-3.5 w-3.5" />
@@ -359,6 +370,65 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
           categoryId={categoryId}
           onSaveSuccess={loadData}
         />
+      )}
+
+      {/* Lightbox Gallery Modal */}
+      {lightboxIndex !== null && design && design.images && design.images.length > 0 && (
+        <Dialog open={true} onOpenChange={(open) => { if (!open) setLightboxIndex(null); }}>
+          <DialogContent className="max-w-4xl p-0 overflow-hidden bg-black/95 border-none text-white flex flex-col items-center justify-center max-h-[90vh]">
+            <div className="relative w-full aspect-[4/5] max-h-[75vh] flex items-center justify-center">
+              <Image
+                src={design.images[lightboxIndex]?.url}
+                alt={`${design.name} gallery image`}
+                fill
+                className="object-contain"
+                priority
+              />
+              
+              {/* Next/Prev controls */}
+              {design.images.length > 1 && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    type="button"
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-white hover:bg-white/20 h-12 w-12 rounded-full"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const count = design.images!.length;
+                      setLightboxIndex((prev) => (prev === null ? 0 : (prev === 0 ? count - 1 : prev - 1)));
+                    }}
+                  >
+                    <ChevronLeft className="h-8 w-8" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    type="button"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white hover:bg-white/20 h-12 w-12 rounded-full"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const count = design.images!.length;
+                      setLightboxIndex((prev) => (prev === null ? 0 : (prev === count - 1 ? 0 : prev + 1)));
+                    }}
+                  >
+                    <ChevronRight className="h-8 w-8" />
+                  </Button>
+                </>
+              )}
+            </div>
+            
+            {/* Caption bar */}
+            <div className="w-full bg-black/80 py-3 px-6 flex justify-between items-center border-t border-white/10 text-sm">
+              <span>
+                Color: <span className="text-primary font-bold">{design.images[lightboxIndex]?.color}</span>
+              </span>
+              <span className="font-mono text-white/60">
+                {lightboxIndex + 1} / {design.images.length}
+              </span>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

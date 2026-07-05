@@ -55,22 +55,24 @@ export function DesignEditorForm({
   const [saving, setSaving] = useState(false);
   const [uploadingColors, setUploadingColors] = useState<Record<string, boolean>>({});
 
-  // Reset or fill form when design changes
+  // Reset or fill form when design changes or modal opens
   useEffect(() => {
-    if (design) {
-      setName(design.name);
-      setCode(design.code);
-      setSelectedCatId(design.categoryId);
-      setVariants(design.variants || []);
-      setImages(design.images || []);
-    } else {
-      setName("");
-      setCode("");
-      setSelectedCatId(categoryId || (categories[0]?.id || ""));
-      setVariants([]);
-      setImages([]);
+    if (open) {
+      if (design) {
+        setName(design.name);
+        setCode(design.code);
+        setSelectedCatId(design.categoryId);
+        setVariants(design.variants || []);
+        setImages(design.images || []);
+      } else {
+        setName("");
+        setCode("");
+        setSelectedCatId(categoryId || (categories[0]?.id || ""));
+        setVariants([]);
+        setImages([]);
+      }
     }
-  }, [design, categoryId, categories, open]);
+  }, [open, design]);
 
   // Generate design code if creating and category changes
   useEffect(() => {
@@ -293,61 +295,65 @@ export function DesignEditorForm({
           </div>
 
           {/* Image Upload per Color */}
-          {variants.length > 0 && (
+          {variants.filter((v) => v.color.trim() !== "").length > 0 && (
             <div className="space-y-4 pt-4 border-t border-border/60">
               <h4 className="font-semibold text-sm text-foreground">Images Library (1-3 photos per color)</h4>
               
               <div className="space-y-4">
-                {variants.map((variant) => {
-                  const colorKey = variant.color || "Default";
-                  const colorImages = images.filter((img) => img.color === colorKey);
+                {variants
+                  .filter((v) => v.color.trim() !== "")
+                  .map((variant) => {
+                    const colorKey = variant.color.trim();
+                    const colorImages = images.filter(
+                      (img) => img.color.trim().toLowerCase() === colorKey.toLowerCase()
+                    );
 
-                  return (
-                    <div key={variant.id || colorKey} className="p-4 border rounded-xl bg-muted/5 border-border/80 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-sm text-foreground">
-                          Color: <span className="text-primary">{colorKey}</span>
-                        </span>
-                        
-                        {colorImages.length < 3 && (
-                          <div className="relative">
-                            <input
-                              type="file"
-                              accept="image/*"
-                              multiple
-                              id={`file-${variant.id}`}
-                              className="hidden"
-                              onChange={(e) => handleImageUpload(colorKey, e)}
-                              disabled={uploadingColors[colorKey]}
-                            />
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              asChild
-                              disabled={uploadingColors[colorKey]}
-                            >
-                              <label htmlFor={`file-${variant.id}`} className="cursor-pointer flex items-center gap-1.5">
-                                {uploadingColors[colorKey] ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <Upload className="h-3.5 w-3.5" />
-                                )}
-                                Upload Photo ({colorImages.length}/3)
-                              </label>
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Display Uploaded Images for this Color */}
-                      {colorImages.length === 0 ? (
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground italic py-2">
-                          <ImageIcon className="h-4 w-4" /> No images uploaded for this color.
+                    return (
+                      <div key={variant.id || colorKey} className="p-4 border rounded-xl bg-muted/5 border-border/80 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-sm text-foreground">
+                            Color: <span className="text-primary">{colorKey}</span>
+                          </span>
+                          
+                          {colorImages.length < 3 && (
+                            <div className="relative">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                id={`file-${variant.id}`}
+                                className="hidden"
+                                onChange={(e) => handleImageUpload(colorKey, e)}
+                                disabled={uploadingColors[colorKey]}
+                              />
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                asChild
+                                disabled={uploadingColors[colorKey]}
+                              >
+                                <label htmlFor={`file-${variant.id}`} className="cursor-pointer flex items-center gap-1.5">
+                                  {uploadingColors[colorKey] ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Upload className="h-3.5 w-3.5" />
+                                  )}
+                                  Upload Photo ({colorImages.length}/3)
+                                </label>
+                              </Button>
+                            </div>
+                          )}
                         </div>
-                      ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
-                          {images.map((img, imgIdx) => {
-                            if (img.color !== colorKey) return null;
+
+                        {/* Display Uploaded Images for this Color */}
+                        {colorImages.length === 0 ? (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground italic py-2">
+                            <ImageIcon className="h-4 w-4" /> No images uploaded for this color.
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+                            {images.map((img, imgIdx) => {
+                              if (img.color.trim().toLowerCase() !== colorKey.toLowerCase()) return null;
                             return (
                               <div key={imgIdx} className="relative group aspect-square rounded-lg overflow-hidden border border-border/80 bg-muted/30">
                                 <Image

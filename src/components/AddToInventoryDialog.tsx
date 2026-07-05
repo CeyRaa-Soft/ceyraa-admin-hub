@@ -469,10 +469,14 @@ export function AddToInventoryDialog({
                       <div className="space-y-3 pt-2">
                         <Label className="text-xs font-semibold block">Upload Photos for Design Library (1-3 per color)</Label>
                         <div className="space-y-3">
-                          {item.variants.map((variant) => {
-                            const colorKey = variant.color || "Default";
-                            const uploadKey = `${item.id}-${colorKey}`;
-                            const colorImages = mapping.images.filter((img) => img.color === colorKey);
+                          {item.variants
+                            .filter((v) => v.color.trim() !== "")
+                            .map((variant) => {
+                              const colorKey = variant.color.trim();
+                              const uploadKey = `${item.id}-${colorKey}`;
+                              const colorImages = mapping.images.filter(
+                                (img) => img.color.trim().toLowerCase() === colorKey.toLowerCase()
+                              );
 
                             return (
                               <div key={variant.color} className="p-3 border rounded-xl bg-card border-border/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm">

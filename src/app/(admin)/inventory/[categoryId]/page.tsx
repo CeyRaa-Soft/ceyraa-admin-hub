@@ -19,6 +19,8 @@ import {
   Trash2,
   Shirt,
   Info,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -160,86 +162,16 @@ export default function CategoryDesignsPage({ params }: CategoryDesignsPageProps
         </Card>
       ) : (
         <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 animate-in fade-in duration-300">
-          {designs.map((design) => {
-            const totalStock = calculateTotalStock(design);
-            // Get first image as thumbnail
-            const thumbnail = design.images?.[0]?.url;
-
-            return (
-              <div key={design.id} className="group relative">
-                <Link href={`/inventory/${categoryId}/${design.id}`} className="block">
-                  <Card className="overflow-hidden transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1.5 bg-card border border-border/85 h-full flex flex-col">
-                    {/* Thumbnail Display */}
-                    <div className="relative aspect-square w-full bg-muted/20 border-b border-border/40 overflow-hidden flex items-center justify-center text-muted-foreground/40">
-                      {thumbnail ? (
-                        <Image
-                          src={thumbnail}
-                          alt={design.name}
-                          fill
-                          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
-                          className="object-cover transition-transform duration-300 group-hover:scale-105"
-                        />
-                      ) : (
-                        <Shirt className="h-16 w-16 stroke-[1.2]" />
-                      )}
-
-                      {/* Design Code Badge */}
-                      <span className="absolute top-2.5 left-2.5 bg-black/70 border border-white/10 backdrop-blur-sm text-white text-[10px] font-bold font-mono px-2 py-0.5 rounded">
-                        {design.code}
-                      </span>
-
-                      {/* Quick Action Overlays */}
-                      <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                        <Button
-                          variant="secondary"
-                          size="icon"
-                          className="h-8 w-8 rounded-full bg-white/90 hover:bg-white text-foreground shadow-sm"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleOpenEditor(design);
-                          }}
-                          title="Edit design"
-                        >
-                          <FilePen className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="icon"
-                          className="h-8 w-8 rounded-full shadow-sm"
-                          onClick={(e) => handleDeleteDesign(design, e)}
-                          title="Delete design"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    <CardHeader className="p-4 flex-1">
-                      <div className="flex justify-between items-start gap-2">
-                        <div>
-                          <CardTitle className="text-base font-headline group-hover:text-primary transition-colors line-clamp-1">
-                            {design.name}
-                          </CardTitle>
-                          <CardDescription className="text-xs mt-0.5">
-                            Colors: {design.variants?.length || 0}
-                          </CardDescription>
-                        </div>
-                      </div>
-                    </CardHeader>
-
-                    {/* Stock status footer */}
-                    <div className="px-4 pb-4 pt-0 border-t border-border/20 mt-auto flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Available Stock</span>
-                      <span className={`font-bold ${totalStock > 0 ? "text-emerald-600 font-mono text-sm" : "text-muted-foreground italic"}`}>
-                        {totalStock > 0 ? `${totalStock} pcs` : "Out of Stock"}
-                      </span>
-                    </div>
-                  </Card>
-                </Link>
-              </div>
-            );
-          })}
+          {designs.map((design) => (
+            <DesignCard
+              key={design.id}
+              design={design}
+              categoryId={categoryId}
+              onEdit={handleOpenEditor}
+              onDelete={handleDeleteDesign}
+              totalStock={calculateTotalStock(design)}
+            />
+          ))}
         </div>
       )}
 
@@ -254,6 +186,161 @@ export default function CategoryDesignsPage({ params }: CategoryDesignsPageProps
           onSaveSuccess={loadData}
         />
       )}
+    </div>
+  );
+}
+
+interface DesignCardProps {
+  design: any;
+  categoryId: string;
+  onEdit: (design: any) => void;
+  onDelete: (design: any, e: React.MouseEvent) => void;
+  totalStock: number;
+}
+
+function DesignCard({ design, categoryId, onEdit, onDelete, totalStock }: DesignCardProps) {
+  const [activeImgIdx, setActiveImgIdx] = useState(0);
+  const images = design.images || [];
+  const hasImages = images.length > 0;
+  const currentImage = hasImages ? images[activeImgIdx]?.url : null;
+  const currentColor = hasImages ? images[activeImgIdx]?.color : "";
+
+  const handlePrev = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setActiveImgIdx((prev) => (prev === 0 ? images.length - 1 : prev - 1));
+  };
+
+  const handleNext = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setActiveImgIdx((prev) => (prev === images.length - 1 ? 0 : prev + 1));
+  };
+
+  // Reset active image index if design changes
+  useEffect(() => {
+    setActiveImgIdx(0);
+  }, [design]);
+
+  return (
+    <div className="group relative">
+      <Link href={`/inventory/${categoryId}/${design.id}`} className="block">
+        <Card className="overflow-hidden transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1.5 bg-card border border-border/85 h-full flex flex-col">
+          {/* Thumbnail Display */}
+          <div className="relative aspect-square w-full bg-muted/20 border-b border-border/40 overflow-hidden flex items-center justify-center text-muted-foreground/40">
+            {hasImages ? (
+              <Image
+                src={currentImage!}
+                alt={`${design.name} - ${currentColor}`}
+                fill
+                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
+                className="object-cover transition-transform duration-300 group-hover:scale-105"
+              />
+            ) : (
+              <Shirt className="h-16 w-16 stroke-[1.2]" />
+            )}
+
+            {/* Design Code Badge */}
+            <span className="absolute top-2.5 left-2.5 bg-black/70 border border-white/10 backdrop-blur-sm text-white text-[10px] font-bold font-mono px-2 py-0.5 rounded z-10">
+              {design.code}
+            </span>
+
+            {/* Image cycle arrows */}
+            {hasImages && images.length > 1 && (
+              <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-between px-2 opacity-0 group-hover:opacity-100 transition-opacity z-15">
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  type="button"
+                  className="h-7 w-7 rounded-full bg-white/90 hover:bg-white text-foreground shadow-md hover:scale-105 transition-all"
+                  onClick={handlePrev}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  type="button"
+                  className="h-7 w-7 rounded-full bg-white/90 hover:bg-white text-foreground shadow-md hover:scale-105 transition-all"
+                  onClick={handleNext}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+
+            {/* Indicator dots */}
+            {hasImages && images.length > 1 && (
+              <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 flex gap-1 z-10 bg-black/40 px-2 py-1 rounded-full backdrop-blur-xs">
+                {images.map((_: any, idx: number) => (
+                  <span
+                    key={idx}
+                    className={`h-1.5 w-1.5 rounded-full transition-all ${
+                      idx === activeImgIdx ? "bg-white scale-125" : "bg-white/50"
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Display active image color indicator */}
+            {hasImages && (
+              <span className="absolute bottom-2.5 right-2.5 bg-black/70 text-white text-[9px] font-bold px-1.5 py-0.5 rounded font-mono z-10 tracking-wider">
+                {currentColor}
+              </span>
+            )}
+
+            {/* Quick Action Overlays */}
+            <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+              <Button
+                variant="secondary"
+                size="icon"
+                type="button"
+                className="h-8 w-8 rounded-full bg-white/90 hover:bg-white text-foreground shadow-sm"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onEdit(design);
+                }}
+                title="Edit design"
+              >
+                <FilePen className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="destructive"
+                size="icon"
+                type="button"
+                className="h-8 w-8 rounded-full shadow-sm"
+                onClick={(e) => onDelete(design, e)}
+                title="Delete design"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+
+          <CardHeader className="p-4 flex-1">
+            <div className="flex justify-between items-start gap-2">
+              <div>
+                <CardTitle className="text-base font-headline group-hover:text-primary transition-colors line-clamp-1">
+                  {design.name}
+                </CardTitle>
+                <CardDescription className="text-xs mt-0.5">
+                  Colors: {design.variants?.length || 0}
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+
+          {/* Stock status footer */}
+          <div className="px-4 pb-4 pt-0 border-t border-border/20 mt-auto flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Available Stock</span>
+            <span className={`font-bold ${totalStock > 0 ? "text-emerald-600 font-mono text-sm" : "text-muted-foreground italic"}`}>
+              {totalStock > 0 ? `${totalStock} pcs` : "Out of Stock"}
+            </span>
+          </div>
+        </Card>
+      </Link>
     </div>
   );
 }
