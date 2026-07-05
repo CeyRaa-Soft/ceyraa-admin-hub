@@ -11,6 +11,12 @@ const orderSchema = z.object({
   date: z.string(),
   status: z.enum(["Pending", "Approved", "Delivered"]).default("Pending"),
   categories: z.array(z.any()).optional().default([]),
+  stageImages: z.array(
+    z.object({
+      url: z.string(),
+      publicId: z.string().optional(),
+    })
+  ).optional().default([]),
 });
 
 export async function GET() {

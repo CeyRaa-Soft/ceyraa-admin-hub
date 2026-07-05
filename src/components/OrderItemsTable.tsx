@@ -295,7 +295,7 @@ export const OrderItemsTable: React.FC<OrderItemsTableProps> = ({
       )}
 
       <div className="flex justify-between items-center pt-4 border-t">
-        {showAddButton && !addingItem && (
+        {showAddButton && !addingItem && (isMaterialsCategory || isOtherCategory || items.length < 1) && (
           <Button
             variant="ghost"
             size="sm"

@@ -37,13 +37,21 @@ export const inventoryService = {
     apiClient.delete<{ success: boolean }>(`/api/designs/${id}`),
 
   // Image Upload
-  uploadImage: async (file: File, designCode?: string, color?: string): Promise<{ url: string; publicId: string }> => {
+  uploadImage: async (
+    file: File,
+    designCode?: string,
+    color?: string,
+    folder?: string,
+    orderId?: string
+  ): Promise<{ url: string; publicId: string }> => {
     const formData = new FormData();
     formData.append("file", file);
 
     const queryParams = new URLSearchParams();
     if (designCode) queryParams.append("designCode", designCode);
     if (color) queryParams.append("color", color);
+    if (folder) queryParams.append("folder", folder);
+    if (orderId) queryParams.append("orderId", orderId);
 
     const response = await fetch(`/api/upload?${queryParams.toString()}`, {
       method: "POST",
