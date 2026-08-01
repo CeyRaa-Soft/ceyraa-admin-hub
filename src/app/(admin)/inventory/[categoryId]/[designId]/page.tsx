@@ -238,7 +238,13 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
           <Sparkles className="h-5 w-5 text-primary animate-pulse" />
           <h2 className="text-xl font-bold font-headline text-foreground">Available Stock Levels</h2>
         </div>
-        <GarmentItemsSummaryTable variants={variants} showPrice={true} />
+        <GarmentItemsSummaryTable
+          variants={variants}
+          showPrice={true}
+          onAddCustomerOrder={(color, size) => {
+            window.location.href = `/customer-orders?addOrder=true&categoryId=${categoryId}&designId=${designId}&color=${encodeURIComponent(color)}&size=${encodeURIComponent(size)}`;
+          }}
+        />
       </div>
 
       {/* Bottom: Premium Photo Gallery */}

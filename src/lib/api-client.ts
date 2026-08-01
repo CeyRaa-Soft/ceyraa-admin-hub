@@ -1,10 +1,24 @@
 import axios from "axios";
 
 const instance = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_API_URL || "",
   headers: {
     "Content-Type": "application/json",
   },
 });
+
+// Request interceptor to automatically route /api/... to /api/admin/...
+instance.interceptors.request.use(
+  (config) => {
+    if (config.url && config.url.startsWith("/api/")) {
+      config.url = config.url.replace(/^\/api\//, "/api/admin/");
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
 instance.interceptors.response.use(
   (response) => {
