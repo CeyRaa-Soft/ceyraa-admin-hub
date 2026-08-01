@@ -7,13 +7,14 @@ import {
   SidebarMenuButton,
   SidebarGroup,
 } from "@/components/ui/sidebar";
-import { LayoutDashboard, Boxes, Truck, Users } from "lucide-react";
+import { LayoutDashboard, Boxes, Truck, Users, ShoppingBag } from "lucide-react";
 import Link from "next/link";
 
 const links = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/inventory", label: "Inventory", icon: Boxes },
   { href: "/supplier-orders", label: "Supplier Orders", icon: Truck },
+  { href: "/customer-orders", label: "Customer Orders", icon: ShoppingBag },
   { href: "/suppliers", label: "Suppliers", icon: Users },
 ];
 

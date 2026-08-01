@@ -7,18 +7,22 @@ import {
   TableBody,
   TableCell,
 } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { ShoppingCart } from "lucide-react";
 import type { ColorVariant } from "@/types/order";
 
 interface GarmentItemsSummaryTableProps {
   variants: ColorVariant[];
   showPrice?: boolean;
   emptyMessage?: string;
+  onAddCustomerOrder?: (color: string, size: string) => void;
 }
 
 export const GarmentItemsSummaryTable: React.FC<GarmentItemsSummaryTableProps> = ({
   variants,
   showPrice = true,
   emptyMessage = "No variants or sizes specified.",
+  onAddCustomerOrder,
 }) => {
   if (!variants || variants.length === 0) {
     return (
@@ -49,6 +53,9 @@ export const GarmentItemsSummaryTable: React.FC<GarmentItemsSummaryTableProps> =
             {showPrice && (
               <TableHead className="font-semibold text-foreground py-3 text-right pr-6">Unit Price</TableHead>
             )}
+            {onAddCustomerOrder && (
+              <TableHead className="font-semibold text-foreground py-3 text-right pr-6">Actions</TableHead>
+            )}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -78,6 +85,20 @@ export const GarmentItemsSummaryTable: React.FC<GarmentItemsSummaryTableProps> =
                       ${(size.unitPrice || 0).toFixed(2)}
                     </TableCell>
                   )}
+                  {onAddCustomerOrder && (
+                    <TableCell className="text-right py-2 pr-6">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs gap-1 hover:bg-primary/10 hover:text-primary transition-all duration-200"
+                        disabled={size.quantity <= 0}
+                        onClick={() => onAddCustomerOrder(variant.color, size.size)}
+                      >
+                        <ShoppingCart className="h-3.5 w-3.5" />
+                        Order
+                      </Button>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </React.Fragment>
@@ -95,9 +116,13 @@ export const GarmentItemsSummaryTable: React.FC<GarmentItemsSummaryTableProps> =
                 ${totalValuation.toFixed(2)}
               </TableCell>
             )}
+            {onAddCustomerOrder && (
+              <TableCell className="py-4 pr-6" />
+            )}
           </TableRow>
         </TableBody>
       </Table>
     </div>
   );
 };
+

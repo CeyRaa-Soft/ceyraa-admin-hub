@@ -21,6 +21,7 @@ import {
   Info,
   ChevronLeft,
   ChevronRight,
+  ShoppingCart,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -333,11 +334,26 @@ function DesignCard({ design, categoryId, onEdit, onDelete, totalStock }: Design
           </CardHeader>
 
           {/* Stock status footer */}
-          <div className="px-4 pb-4 pt-0 border-t border-border/20 mt-auto flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Available Stock</span>
-            <span className={`font-bold ${totalStock > 0 ? "text-emerald-600 font-mono text-sm" : "text-muted-foreground italic"}`}>
-              {totalStock > 0 ? `${totalStock} pcs` : "Out of Stock"}
-            </span>
+          <div className="px-4 pb-4 pt-0 border-t border-border/20 mt-auto space-y-3">
+            <div className="flex items-center justify-between text-xs pt-3">
+              <span className="text-muted-foreground">Available Stock</span>
+              <span className={`font-bold ${totalStock > 0 ? "text-emerald-600 font-mono text-sm" : "text-muted-foreground italic"}`}>
+                {totalStock > 0 ? `${totalStock} pcs` : "Out of Stock"}
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full h-8 text-xs gap-1.5 text-primary hover:bg-primary/10 transition-colors"
+              disabled={totalStock <= 0}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                window.location.href = `/customer-orders?addOrder=true&categoryId=${categoryId}&designId=${design.id}`;
+              }}
+            >
+              <ShoppingCart className="h-3.5 w-3.5" /> Order
+            </Button>
           </div>
         </Card>
       </Link>
