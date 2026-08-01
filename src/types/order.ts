@@ -24,6 +24,7 @@ export type Order = {
   items: OrderItem[];
   type?: "default" | "template";
   categories?: OrderCategory[];
+  stageImages?: { url: string; publicId: string }[];
   defaultSummary?: {
     totalCost: number;
     clothes: {
