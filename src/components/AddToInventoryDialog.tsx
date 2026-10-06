@@ -26,13 +26,26 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Upload, X, Check, Image as ImageIcon, AlertCircle, Info } from "lucide-react";
+import {
+  Loader2,
+  Upload,
+  X,
+  Check,
+  Image as ImageIcon,
+  AlertCircle,
+  Info,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import { inventoryService } from "@/services/inventory.service";
-import type { Order, OrderItem } from "@/types/order";
+import type { Order, OrderItem, ColorVariant } from "@/types/order";
 import type { DressCategory, Design, DesignImage } from "@/types/inventory";
 import Image from "next/image";
+import {
+  calculateOrderTotal,
+  calculateTotalDressCount,
+  calculateSellingPrice,
+} from "@/lib/orderCalculations";
 
 interface AddToInventoryDialogProps {
   open: boolean;
@@ -49,6 +62,7 @@ type ItemMapping = {
   name: string; // for create
   code: string; // for create (optional preview)
   images: DesignImage[];
+  variants?: ColorVariant[];
 };
 
 export function AddToInventoryDialog({
@@ -61,14 +75,22 @@ export function AddToInventoryDialog({
   const [categories, setCategories] = useState<DressCategory[]>([]);
   const [designsMap, setDesignsMap] = useState<Record<string, Design[]>>({}); // categoryId -> designs
   const [mappings, setMappings] = useState<ItemMapping[]>([]);
-  
+
   // Loading states
   const [loadingCats, setLoadingCats] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [uploadingColors, setUploadingColors] = useState<Record<string, boolean>>({}); // "itemId-color" -> boolean
+  const [uploadingColors, setUploadingColors] = useState<
+    Record<string, boolean>
+  >({}); // "itemId-color" -> boolean
 
   // Get order items in the production category
-  const garmentItems = order?.categories?.find((c) => c.id === "production")?.items || [];
+  const garmentItems =
+    order?.categories?.find((c) => c.id === "production")?.items || [];
+
+  const totalOrderCost = order ? calculateOrderTotal(order) : 0;
+  const totalDressCount = order ? calculateTotalDressCount(order) : 0;
+  const unitCost = totalDressCount > 0 ? totalOrderCost / totalDressCount : 0;
+  const defaultSellingPrice = calculateSellingPrice(unitCost);
 
   // Load dress categories
   useEffect(() => {
@@ -78,9 +100,15 @@ export function AddToInventoryDialog({
           setLoadingCats(true);
           const cats = await inventoryService.getAllCategories();
           setCategories(cats);
-          
+
           // Pre-populate empty mappings for each garment item (user must select category first)
           if (garmentItems.length > 0) {
+            const totalOrderCost = order ? calculateOrderTotal(order) : 0;
+            const totalDressCount = order ? calculateTotalDressCount(order) : 0;
+            const unitCost =
+              totalDressCount > 0 ? totalOrderCost / totalDressCount : 0;
+            const defaultSellingPrice = calculateSellingPrice(unitCost);
+
             const initialMappings = garmentItems.map((item) => {
               return {
                 orderItemId: item.id,
@@ -90,6 +118,13 @@ export function AddToInventoryDialog({
                 name: item.name,
                 code: "",
                 images: [],
+                variants: item.variants.map((v) => ({
+                  ...v,
+                  sizes: v.sizes.map((s) => ({
+                    ...s,
+                    unitPrice: defaultSellingPrice, // Pre-populate with calculated selling price
+                  })),
+                })),
               };
             });
             setMappings(initialMappings);
@@ -129,7 +164,7 @@ export function AddToInventoryDialog({
           return { ...m, categoryId: catId, designId: "", code: "" };
         }
         return m;
-      })
+      }),
     );
   };
 
@@ -140,25 +175,47 @@ export function AddToInventoryDialog({
           return { ...m, action, designId: "", code: "" };
         }
         return m;
-      })
+      }),
     );
   };
 
-  const handleMappingFieldChange = (itemId: string, field: keyof ItemMapping, value: any) => {
+  const handleMappingFieldChange = (
+    itemId: string,
+    field: keyof ItemMapping,
+    value: any,
+  ) => {
     setMappings((prev) =>
       prev.map((m) => {
         if (m.orderItemId === itemId) {
           return { ...m, [field]: value };
         }
         return m;
-      })
+      }),
+    );
+  };
+
+  const handlePriceChange = (itemId: string, price: number) => {
+    setMappings((prev) =>
+      prev.map((m) => {
+        if (m.orderItemId === itemId && m.variants) {
+          const updatedVariants = m.variants.map((v) => {
+            const updatedSizes = v.sizes.map((s) => ({
+              ...s,
+              unitPrice: price,
+            }));
+            return { ...v, sizes: updatedSizes };
+          });
+          return { ...m, variants: updatedVariants };
+        }
+        return m;
+      }),
     );
   };
 
   const handleImageUpload = async (
     itemId: string,
     color: string,
-    e: React.ChangeEvent<HTMLInputElement>
+    e: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -170,7 +227,9 @@ export function AddToInventoryDialog({
     const mapping = mappings.find((m) => m.orderItemId === itemId);
     if (!mapping) return;
 
-    const existingCount = mapping.images.filter((img) => img.color === colorKey).length;
+    const existingCount = mapping.images.filter(
+      (img) => img.color === colorKey,
+    ).length;
     const maxAllowed = 3;
     const remainingSlots = maxAllowed - existingCount;
 
@@ -200,7 +259,7 @@ export function AddToInventoryDialog({
         const res = await inventoryService.uploadImage(
           file,
           mapping.code || mapping.name || order?.id,
-          colorKey
+          colorKey,
         );
         uploadedImages.push({
           color: colorKey,
@@ -215,7 +274,7 @@ export function AddToInventoryDialog({
             return { ...m, images: [...m.images, ...uploadedImages] };
           }
           return m;
-        })
+        }),
       );
 
       toast({
@@ -245,7 +304,7 @@ export function AddToInventoryDialog({
           };
         }
         return m;
-      })
+      }),
     );
   };
 
@@ -310,16 +369,22 @@ export function AddToInventoryDialog({
   if (garmentItems.length === 0) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
+        <DialogContent
+          className="sm:max-w-md"
+          onPointerDownOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Add to Inventory</DialogTitle>
             <DialogDescription>
-              This order does not contain any garments under the Sewing & Tailoring ( Garments ) section.
+              This order does not contain any garments under the Sewing &
+              Tailoring ( Garments ) section.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col items-center justify-center p-6 text-center text-amber-500">
             <AlertCircle className="h-12 w-12 mb-3" />
-            <p className="font-semibold text-sm">No inventory conversion needed.</p>
+            <p className="font-semibold text-sm">
+              No inventory conversion needed.
+            </p>
           </div>
           <DialogFooter>
             <Button onClick={() => onOpenChange(false)}>Close</Button>
@@ -331,11 +396,15 @@ export function AddToInventoryDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()}>
+      <DialogContent
+        className="sm:max-w-3xl max-h-[85vh] overflow-y-auto"
+        onPointerDownOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Confirm & Add to Inventory</DialogTitle>
           <DialogDescription>
-            Map each garment item in order {order?.id} to a design category and upload images.
+            Map each garment item in order {order?.id} to a design category and
+            upload images.
           </DialogDescription>
         </DialogHeader>
 
@@ -346,7 +415,12 @@ export function AddToInventoryDialog({
           </div>
         ) : (
           <div className="space-y-6 py-4">
-            <Accordion type="single" collapsible defaultValue={garmentItems[0]?.id} className="w-full space-y-3">
+            <Accordion
+              type="single"
+              collapsible
+              defaultValue={garmentItems[0]?.id}
+              className="w-full space-y-3"
+            >
               {garmentItems.map((item) => {
                 const mapping = mappings.find((m) => m.orderItemId === item.id);
                 if (!mapping) return null;
@@ -361,26 +435,48 @@ export function AddToInventoryDialog({
                   >
                     <AccordionTrigger className="px-5 py-3 hover:no-underline hover:bg-muted/5">
                       <div className="flex items-center justify-between w-full text-left pr-4">
-                        <span className="font-semibold text-sm md:text-base text-foreground">{item.name}</span>
+                        <span className="font-semibold text-sm md:text-base text-foreground">
+                          {item.name}
+                        </span>
                         <div className="flex gap-2">
                           <Badge variant="secondary">
-                            {item.variants.reduce((sum, v) => sum + v.sizes.reduce((sSum, s) => sSum + s.quantity, 0), 0)} pcs
+                            {item.variants.reduce(
+                              (sum, v) =>
+                                sum +
+                                v.sizes.reduce(
+                                  (sSum, s) => sSum + s.quantity,
+                                  0,
+                                ),
+                              0,
+                            )}{" "}
+                            pcs
                           </Badge>
-                          <Badge variant={mapping.action === "create" ? "default" : "outline"}>
-                            {mapping.action === "create" ? "New Design" : "Merge Design"}
+                          <Badge
+                            variant={
+                              mapping.action === "create"
+                                ? "default"
+                                : "outline"
+                            }
+                          >
+                            {mapping.action === "create"
+                              ? "New Design"
+                              : "Merge Design"}
                           </Badge>
                         </div>
                       </div>
                     </AccordionTrigger>
                     <AccordionContent className="px-5 pb-5 pt-3 space-y-4 border-t border-border/40 bg-muted/5">
-                      
                       {/* Category Selection Row */}
                       <div className="p-4 border border-dashed rounded-xl bg-card border-border/60 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                         <div className="space-y-1.5 w-full md:max-w-xs">
-                          <Label className="text-xs font-semibold">Dress Category</Label>
+                          <Label className="text-xs font-semibold">
+                            Dress Category
+                          </Label>
                           <Select
                             value={mapping.categoryId}
-                            onValueChange={(val) => handleCategoryChange(item.id, val)}
+                            onValueChange={(val) =>
+                              handleCategoryChange(item.id, val)
+                            }
                           >
                             <SelectTrigger className="h-9">
                               <SelectValue placeholder="Select Dress Category" />
@@ -398,10 +494,14 @@ export function AddToInventoryDialog({
                           <Info className="h-4.5 w-4.5 text-primary shrink-0" />
                           <span>
                             Need a new category? Go to the{" "}
-                            <Link href="/inventory" className="text-primary hover:underline font-semibold">
+                            <Link
+                              href="/inventory"
+                              className="text-primary hover:underline font-semibold"
+                            >
                               Inventory Page
                             </Link>{" "}
-                            to create it first. (You cannot create categories in this modal).
+                            to create it first. (You cannot create categories in
+                            this modal).
                           </span>
                         </div>
                       </div>
@@ -411,36 +511,60 @@ export function AddToInventoryDialog({
                           {/* Mapping Setup (Action & Design Selection) */}
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-border/40 pt-4">
                             <div className="space-y-1.5">
-                              <Label className="text-xs font-semibold">Action</Label>
+                              <Label className="text-xs font-semibold">
+                                Action
+                              </Label>
                               <Select
                                 value={mapping.action}
-                                onValueChange={(val: "create" | "merge") => handleActionChange(item.id, val)}
+                                onValueChange={(val: "create" | "merge") =>
+                                  handleActionChange(item.id, val)
+                                }
                               >
                                 <SelectTrigger className="h-9">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="create">Create New Design</SelectItem>
-                                  <SelectItem value="merge">Link to Existing Design</SelectItem>
+                                  <SelectItem value="create">
+                                    Create New Design
+                                  </SelectItem>
+                                  <SelectItem value="merge">
+                                    Link to Existing Design
+                                  </SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
 
                             {mapping.action === "create" ? (
                               <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold">New Design Name</Label>
+                                <Label className="text-xs font-semibold">
+                                  New Design Name
+                                </Label>
                                 <Input
                                   value={mapping.name}
-                                  onChange={(e) => handleMappingFieldChange(item.id, "name", e.target.value)}
+                                  onChange={(e) =>
+                                    handleMappingFieldChange(
+                                      item.id,
+                                      "name",
+                                      e.target.value,
+                                    )
+                                  }
                                   className="h-9"
                                 />
                               </div>
                             ) : (
                               <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold">Select Existing Design</Label>
+                                <Label className="text-xs font-semibold">
+                                  Select Existing Design
+                                </Label>
                                 <Select
                                   value={mapping.designId}
-                                  onValueChange={(val) => handleMappingFieldChange(item.id, "designId", val)}
+                                  onValueChange={(val) =>
+                                    handleMappingFieldChange(
+                                      item.id,
+                                      "designId",
+                                      val,
+                                    )
+                                  }
                                 >
                                   <SelectTrigger className="h-9">
                                     <SelectValue placeholder="Select Design" />
@@ -462,22 +586,72 @@ export function AddToInventoryDialog({
                             )}
                           </div>
 
-                          {/* Display Quantities Summary */}
-                          <div className="text-xs bg-muted/20 border border-border/40 rounded-lg p-3">
-                            <span className="font-semibold text-muted-foreground block mb-1">Items to Add:</span>
-                            <div className="flex flex-wrap gap-2">
-                              {item.variants.map((v) => (
-                                <div key={v.color} className="bg-background border rounded px-2.5 py-1 text-foreground/80 font-mono">
-                                  <span className="font-semibold text-primary">{v.color}</span>:{" "}
-                                  {v.sizes.map((s) => `${s.size} (${s.quantity}pcs)`).join(", ")}
-                                </div>
-                              ))}
+                          {/* Define Selling Price for this Design */}
+                          <div className="space-y-3 pt-2">
+                            <Label className="text-xs font-semibold block">
+                              Define Selling Price for this Design
+                            </Label>
+                            <div className="text-xs text-muted-foreground bg-muted/40 p-2.5 rounded-lg border border-border/60 mb-2">
+                              <span className="font-semibold block mb-0.5">
+                                How default selling price is calculated:
+                              </span>
+                              Total Order Cost:{" "}
+                              <span className="font-semibold text-foreground">
+                                ${totalOrderCost.toFixed(2)}
+                              </span>{" "}
+                              divided by Total Dress Count:{" "}
+                              <span className="font-semibold text-foreground">
+                                {totalDressCount} pcs
+                              </span>{" "}
+                              gives Unit Cost:{" "}
+                              <span className="font-semibold text-foreground">
+                                ${unitCost.toFixed(2)} / dress
+                              </span>
+                              .
+                              <br />
+                              Applying the pricing formula (markup & discount
+                              buffer):{" "}
+                              <span className="font-semibold text-primary">
+                                ${defaultSellingPrice.toFixed(2)}
+                              </span>{" "}
+                              per dress.
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 border border-dashed rounded-xl bg-card border-border/80 shadow-xs">
+                              <div className="space-y-1.5 w-full sm:max-w-xs">
+                                <Label className="text-xs font-semibold text-muted-foreground">
+                                  Selling Price per Dress ($)
+                                </Label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={
+                                    mapping.variants?.[0]?.sizes?.[0]
+                                      ?.unitPrice || ""
+                                  }
+                                  onChange={(e) =>
+                                    handlePriceChange(
+                                      item.id,
+                                      parseFloat(e.target.value) || 0,
+                                    )
+                                  }
+                                  className="h-9 font-mono bg-background"
+                                />
+                              </div>
+                              <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg border border-border/60 flex-1">
+                                <strong>Note:</strong> This price will be
+                                applied to all colors and sizes for this design
+                                in the inventory.
+                              </div>
                             </div>
                           </div>
 
                           {/* Image Upload per Color */}
                           <div className="space-y-3 pt-2">
-                            <Label className="text-xs font-semibold block">Upload Photos for Design Library (1-3 per color)</Label>
+                            <Label className="text-xs font-semibold block">
+                              Upload Photos for Design Library (1-3 per color)
+                            </Label>
                             <div className="space-y-3">
                               {item.variants
                                 .filter((v) => v.color.trim() !== "")
@@ -485,22 +659,36 @@ export function AddToInventoryDialog({
                                   const colorKey = variant.color.trim();
                                   const uploadKey = `${item.id}-${colorKey}`;
                                   const colorImages = mapping.images.filter(
-                                    (img) => img.color.trim().toLowerCase() === colorKey.toLowerCase()
+                                    (img) =>
+                                      img.color.trim().toLowerCase() ===
+                                      colorKey.toLowerCase(),
                                   );
 
                                   return (
-                                    <div key={variant.color} className="p-3 border rounded-xl bg-card border-border/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm">
+                                    <div
+                                      key={variant.color}
+                                      className="p-3 border rounded-xl bg-card border-border/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm"
+                                    >
                                       <span className="font-semibold text-xs text-muted-foreground min-w-[100px]">
-                                        Color: <span className="text-primary font-bold">{colorKey}</span>
+                                        Color:{" "}
+                                        <span className="text-primary font-bold">
+                                          {colorKey}
+                                        </span>
                                       </span>
 
                                       <div className="flex flex-wrap items-center gap-3">
                                         {/* Thumbnail list */}
                                         {colorImages.map((img, imgIdx) => {
                                           // Get original index in complete images array to remove
-                                          const origIdx = mapping.images.findIndex((i) => i.url === img.url);
+                                          const origIdx =
+                                            mapping.images.findIndex(
+                                              (i) => i.url === img.url,
+                                            );
                                           return (
-                                            <div key={imgIdx} className="relative w-12 h-12 rounded-lg overflow-hidden border border-border/60">
+                                            <div
+                                              key={imgIdx}
+                                              className="relative w-12 h-12 rounded-lg overflow-hidden border border-border/60"
+                                            >
                                               <Image
                                                 src={img.url}
                                                 alt={`${colorKey} photo`}
@@ -510,7 +698,12 @@ export function AddToInventoryDialog({
                                               />
                                               <button
                                                 type="button"
-                                                onClick={() => handleRemoveImage(item.id, origIdx)}
+                                                onClick={() =>
+                                                  handleRemoveImage(
+                                                    item.id,
+                                                    origIdx,
+                                                  )
+                                                }
                                                 className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-black/75 hover:bg-black text-white flex items-center justify-center"
                                               >
                                                 <X className="h-2.5 w-2.5" />
@@ -528,23 +721,37 @@ export function AddToInventoryDialog({
                                               multiple
                                               id={`file-${item.id}-${colorKey}`}
                                               className="hidden"
-                                              onChange={(e) => handleImageUpload(item.id, colorKey, e)}
-                                              disabled={uploadingColors[uploadKey]}
+                                              onChange={(e) =>
+                                                handleImageUpload(
+                                                  item.id,
+                                                  colorKey,
+                                                  e,
+                                                )
+                                              }
+                                              disabled={
+                                                uploadingColors[uploadKey]
+                                              }
                                             />
                                             <Button
                                               variant="outline"
                                               size="sm"
                                               asChild
-                                              disabled={uploadingColors[uploadKey]}
+                                              disabled={
+                                                uploadingColors[uploadKey]
+                                              }
                                               className="h-8 py-0 px-2.5"
                                             >
-                                              <label htmlFor={`file-${item.id}-${colorKey}`} className="cursor-pointer flex items-center gap-1">
+                                              <label
+                                                htmlFor={`file-${item.id}-${colorKey}`}
+                                                className="cursor-pointer flex items-center gap-1"
+                                              >
                                                 {uploadingColors[uploadKey] ? (
                                                   <Loader2 className="h-3 w-3 animate-spin" />
                                                 ) : (
                                                   <Upload className="h-3 w-3" />
                                                 )}
-                                                Upload Photo ({colorImages.length}/3)
+                                                Upload Photo (
+                                                {colorImages.length}/3)
                                               </label>
                                             </Button>
                                           </div>
@@ -558,7 +765,8 @@ export function AddToInventoryDialog({
                         </div>
                       ) : (
                         <div className="text-center py-6 text-sm text-muted-foreground italic border border-dashed border-border/80 rounded-xl bg-card/40">
-                          Please select a category above to configure design details and upload photos.
+                          Please select a category above to configure design
+                          details and upload photos.
                         </div>
                       )}
                     </AccordionContent>
