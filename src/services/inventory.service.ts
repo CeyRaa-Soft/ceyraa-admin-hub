@@ -36,6 +36,22 @@ export const inventoryService = {
   deleteDesign: (id: string) =>
     apiClient.delete<{ success: boolean }>(`/api/designs/${id}`),
 
+  // Custom Collections
+  getAllCollections: () =>
+    apiClient.get<import("@/types/inventory").Collection[]>("/api/collections"),
+
+  getCollectionById: (id: string) =>
+    apiClient.get<import("@/types/inventory").Collection>(`/api/collections/${id}`),
+
+  createCollection: (payload: { name: string; description?: string; imageUrl?: string }) =>
+    apiClient.post<import("@/types/inventory").Collection>("/api/collections", payload),
+
+  updateCollection: (id: string, payload: Partial<import("@/types/inventory").Collection>) =>
+    apiClient.put<import("@/types/inventory").Collection>(`/api/collections/${id}`, payload),
+
+  deleteCollection: (id: string) =>
+    apiClient.delete<{ success: boolean }>(`/api/collections/${id}`),
+
   // Image Upload
   uploadImage: async (
     file: File,
