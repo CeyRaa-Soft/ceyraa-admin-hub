@@ -26,6 +26,8 @@ export type Collection = {
   name: string;
   description?: string;
   imageUrl?: string;
+  designCount?: number;
+  latestDesignImage?: string;
   createdAt?: string;
   updatedAt?: string;
 };

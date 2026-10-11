@@ -268,10 +268,16 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const colorKey = color || "Default";
+    const colorKey = (color || "Default").trim();
     const filesArray = Array.from(files);
 
-    const existingCount = (design.images || []).filter((img) => img.color === colorKey).length;
+    const existingCount = (design.images || []).filter((img) => {
+      const imgColor = (img.color || "").trim().toLowerCase();
+      const targetColor = colorKey.toLowerCase();
+      if (imgColor && targetColor && imgColor === targetColor) return true;
+      if (design.variants?.length === 1) return true;
+      return false;
+    }).length;
     const maxAllowed = 3;
     const remainingSlots = maxAllowed - existingCount;
 
@@ -726,11 +732,18 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
         ) : (
           <div className="grid gap-6">
             {variants.map((variant) => {
-              const colorKey = variant.color || "Default";
+              const colorKey = (variant.color || "Default").trim();
+              const vColor = colorKey.toLowerCase();
               
               // Filter images for this color variant
               const colorImages = (design.images || []).map((img, idx) => ({ ...img, originalIndex: idx })).filter(
-                (img) => img.color.toLowerCase() === colorKey.toLowerCase()
+                (img) => {
+                  const imgColor = (img.color || "").trim().toLowerCase();
+                  if (imgColor && vColor && imgColor === vColor) return true;
+                  if ((!vColor || vColor === "default") && (!imgColor || imgColor === "default")) return true;
+                  if (variants.length === 1) return true;
+                  return false;
+                }
               );
 
               return (
@@ -869,6 +882,83 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
                 </Card>
               );
             })}
+
+            {/* Unassigned / Other photos section if any exist */}
+            {(() => {
+              const assignedIndices = new Set<number>();
+              variants.forEach((v) => {
+                const vCol = (v.color || "Default").trim().toLowerCase();
+                (design.images || []).forEach((img, idx) => {
+                  const imgCol = (img.color || "").trim().toLowerCase();
+                  if (
+                    (imgCol && vCol && imgCol === vCol) ||
+                    ((!vCol || vCol === "default") && (!imgCol || imgCol === "default")) ||
+                    variants.length === 1
+                  ) {
+                    assignedIndices.add(idx);
+                  }
+                });
+              });
+
+              const unassignedImages = (design.images || [])
+                .map((img, idx) => ({ ...img, originalIndex: idx }))
+                .filter((img) => !assignedIndices.has(img.originalIndex));
+
+              if (unassignedImages.length === 0) return null;
+
+              return (
+                <Card className="overflow-hidden border border-amber-500/30 bg-card shadow-sm">
+                  <CardHeader className="bg-amber-500/10 border-b border-amber-500/20 py-3 px-5 flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle className="text-base font-bold text-amber-700 dark:text-amber-400 flex items-center gap-2">
+                        <span>Unassigned / Other Photos</span>
+                        <span className="text-xs font-normal text-muted-foreground">({unassignedImages.length})</span>
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Photos uploaded without matching a currently configured color variant.
+                      </CardDescription>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-5">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {unassignedImages.map((img) => (
+                        <div
+                          key={img.url}
+                          className="relative group aspect-[3/4] rounded-xl overflow-hidden border border-border/80 bg-muted/20 shadow-sm cursor-zoom-in"
+                          onClick={() => setLightboxIndex(img.originalIndex)}
+                        >
+                          <Image
+                            src={img.url}
+                            alt="Unassigned photo"
+                            fill
+                            sizes="(max-width: 768px) 50vw, 20vw"
+                            className="object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                          <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded font-medium">
+                            {img.color || "Unlabeled"}
+                          </div>
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2.5">
+                            <Button
+                              variant="destructive"
+                              size="icon"
+                              type="button"
+                              className="h-7 w-7 rounded-full ml-auto shadow-md"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveImage(img.originalIndex);
+                              }}
+                              title="Delete photo"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
           </div>
         )}
 

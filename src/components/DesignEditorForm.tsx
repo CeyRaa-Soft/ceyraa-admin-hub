@@ -117,11 +117,18 @@ export function DesignEditorForm({
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const colorKey = color || "Default";
+    const colorKey = (color || "Default").trim();
     const filesArray = Array.from(files);
     
     // Count existing images for this color
-    const existingCount = images.filter((img) => img.color === colorKey).length;
+    const effectiveVariants = variants.filter((v) => v.color.trim() !== "");
+    const existingCount = images.filter((img) => {
+      const imgColor = (img.color || "").trim().toLowerCase();
+      const targetColor = colorKey.toLowerCase();
+      if (imgColor && targetColor && imgColor === targetColor) return true;
+      if (effectiveVariants.length === 1) return true;
+      return false;
+    }).length;
     const maxAllowed = 3;
     const remainingSlots = maxAllowed - existingCount;
 
@@ -201,11 +208,33 @@ export function DesignEditorForm({
     try {
       setSaving(true);
 
+      const sanitizedVariants = variants.map((v) => ({
+        ...v,
+        color: (v.color || "").trim(),
+      }));
+
+      const effectiveVariants = sanitizedVariants.filter((v) => v.color !== "");
+
+      // Ensure each image has a consistent trimmed color, and if 1 variant, assign to it
+      const sanitizedImages = images.map((img) => {
+        const trimmedColor = (img.color || "").trim();
+        if (effectiveVariants.length === 1 && effectiveVariants[0].color) {
+          return {
+            ...img,
+            color: effectiveVariants[0].color,
+          };
+        }
+        return {
+          ...img,
+          color: trimmedColor || (effectiveVariants[0]?.color || "Default"),
+        };
+      });
+
       const payload = {
         name: name.trim(),
         categoryId: selectedCatId,
-        variants,
-        images,
+        variants: sanitizedVariants,
+        images: sanitizedImages,
       };
 
       if (design) {
@@ -304,9 +333,15 @@ export function DesignEditorForm({
                   .filter((v) => v.color.trim() !== "")
                   .map((variant) => {
                     const colorKey = variant.color.trim();
-                    const colorImages = images.filter(
-                      (img) => img.color.trim().toLowerCase() === colorKey.toLowerCase()
-                    );
+                    const vColor = colorKey.toLowerCase();
+                    const effectiveVariants = variants.filter((v) => v.color.trim() !== "");
+                    const colorImages = images.filter((img) => {
+                      const imgColor = (img.color || "").trim().toLowerCase();
+                      if (imgColor && vColor && imgColor === vColor) return true;
+                      if ((!vColor || vColor === "default") && (!imgColor || imgColor === "default")) return true;
+                      if (effectiveVariants.length === 1) return true;
+                      return false;
+                    });
 
                     return (
                       <div key={variant.id || colorKey} className="p-4 border rounded-xl bg-muted/5 border-border/80 space-y-3">
@@ -353,7 +388,12 @@ export function DesignEditorForm({
                         ) : (
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
                             {images.map((img, imgIdx) => {
-                              if (img.color.trim().toLowerCase() !== colorKey.toLowerCase()) return null;
+                              const imgColor = (img.color || "").trim().toLowerCase();
+                              const matches =
+                                (imgColor && vColor && imgColor === vColor) ||
+                                ((!vColor || vColor === "default") && (!imgColor || imgColor === "default")) ||
+                                (effectiveVariants.length === 1);
+                              if (!matches) return null;
                             return (
                               <div key={imgIdx} className="relative group aspect-square rounded-lg overflow-hidden border border-border/80 bg-muted/30">
                                 <Image
@@ -379,6 +419,67 @@ export function DesignEditorForm({
                     </div>
                   );
                 })}
+
+                {/* Display unassigned photos if any */}
+                {(() => {
+                  const effectiveVariants = variants.filter((v) => v.color.trim() !== "");
+                  if (effectiveVariants.length === 0) return null;
+
+                  const assignedIndices = new Set<number>();
+                  effectiveVariants.forEach((v) => {
+                    const vCol = v.color.trim().toLowerCase();
+                    images.forEach((img, idx) => {
+                      const imgCol = (img.color || "").trim().toLowerCase();
+                      if (
+                        (imgCol && vCol && imgCol === vCol) ||
+                        ((!vCol || vCol === "default") && (!imgCol || imgCol === "default")) ||
+                        effectiveVariants.length === 1
+                      ) {
+                        assignedIndices.add(idx);
+                      }
+                    });
+                  });
+
+                  const unassigned = images
+                    .map((img, idx) => ({ ...img, originalIdx: idx }))
+                    .filter((img) => !assignedIndices.has(img.originalIdx));
+
+                  if (unassigned.length === 0) return null;
+
+                  return (
+                    <div className="p-4 border border-amber-500/40 rounded-xl bg-amber-500/5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-xs text-amber-700 dark:text-amber-400">
+                          Other / Unassigned Photos ({unassigned.length})
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+                        {unassigned.map((img) => (
+                          <div key={img.originalIdx} className="relative group aspect-square rounded-lg overflow-hidden border border-border/80 bg-muted/30">
+                            <Image
+                              src={img.url}
+                              alt="Unassigned photo"
+                              fill
+                              sizes="100px"
+                              className="object-cover"
+                            />
+                            <div className="absolute top-1 left-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded">
+                              {img.color || "No color"}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveImage(img.originalIdx)}
+                              className="absolute top-1.5 right-1.5 h-6 w-6 rounded-full bg-black/60 hover:bg-black/85 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Remove image"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           )}
