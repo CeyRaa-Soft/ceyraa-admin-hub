@@ -26,11 +26,14 @@ import {
   Video,
   Play,
   CheckCircle2,
+  Tag,
+  Percent,
+  Layers,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { inventoryService } from "@/services/inventory.service";
-import type { DressCategory, Design, DesignImage } from "@/types/inventory";
+import type { DressCategory, Design, DesignImage, Collection } from "@/types/inventory";
 import { GarmentItemsSummaryTable } from "@/components/GarmentItemsSummaryTable";
 import { DesignEditorForm } from "@/components/DesignEditorForm";
 import Image from "next/image";
@@ -40,7 +43,10 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface DesignDetailPageProps {
   params: Promise<{ categoryId: string; designId: string }>;
@@ -79,15 +85,36 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
   // Video / GIF Showcase State
   const [uploadingVideo, setUploadingVideo] = useState(false);
 
+  // Collections State
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [isTaggingOpen, setIsTaggingOpen] = useState(false);
+  const [defaultCollection, setDefaultCollection] = useState<string>("Queen's Wardrobe");
+  const [customCollection, setCustomCollection] = useState<string>("");
+  const [savingTagging, setSavingTagging] = useState(false);
+
+  // Offer Modal State
+  const [isOfferOpen, setIsOfferOpen] = useState(false);
+  const [discountPercent, setDiscountPercent] = useState<number>(10);
+  const [savingOffer, setSavingOffer] = useState(false);
+
   const loadData = async () => {
     try {
       setLoading(true);
-      const [catData, designData] = await Promise.all([
+      const [catData, designData, colls] = await Promise.all([
         inventoryService.getCategoryById(categoryId),
         inventoryService.getDesignById(designId),
+        inventoryService.getAllCollections().catch(() => [] as Collection[]),
       ]);
       setCategory(catData);
       setDesign(designData);
+      setCollections(colls);
+      if (designData) {
+        setDefaultCollection(designData.defaultCollection || "Queen's Wardrobe");
+        setCustomCollection(designData.customCollection || "");
+        if (designData.offer?.discountPercentage) {
+          setDiscountPercent(designData.offer.discountPercentage);
+        }
+      }
     } catch (err: any) {
       console.error(err);
       toast({
@@ -97,6 +124,138 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveTagging = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!design) return;
+
+    try {
+      setSavingTagging(true);
+      await inventoryService.updateDesign(design.id, {
+        defaultCollection: defaultCollection as any,
+        customCollection: customCollection || undefined,
+      });
+
+      setDesign({
+        ...design,
+        defaultCollection: defaultCollection as any,
+        customCollection: customCollection || undefined,
+      });
+
+      toast({
+        title: "Collections Updated",
+        description: "Design collections tagging saved successfully.",
+      });
+      setIsTaggingOpen(false);
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        variant: "destructive",
+        title: "Save Failed",
+        description: err.message || "Failed to update collection tagging.",
+      });
+    } finally {
+      setSavingTagging(false);
+    }
+  };
+
+  // Helper to determine base price
+  const getBasePrice = () => {
+    if (!design?.variants) return 0;
+    for (const v of design.variants) {
+      if (v.sizes && v.sizes.length > 0) {
+        for (const s of v.sizes) {
+          if (s.unitPrice && s.unitPrice > 0) return s.unitPrice;
+        }
+      }
+    }
+    return 0;
+  };
+
+  const handleSaveOffer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!design) return;
+
+    const basePrice = getBasePrice();
+    const percent = Number(discountPercent);
+    if (isNaN(percent) || percent <= 0 || percent >= 100) {
+      toast({
+        variant: "destructive",
+        title: "Invalid Percentage",
+        description: "Discount percentage must be between 1 and 99.",
+      });
+      return;
+    }
+
+    const offerPrice = Math.round(basePrice * (1 - percent / 100) * 100) / 100;
+
+    try {
+      setSavingOffer(true);
+      const offerPayload = {
+        discountPercentage: percent,
+        offerPrice: offerPrice,
+        originalPrice: basePrice,
+        active: true,
+        startDate: new Date().toISOString(),
+      };
+
+      await inventoryService.updateDesign(design.id, {
+        offer: offerPayload,
+      });
+
+      setDesign({
+        ...design,
+        offer: offerPayload,
+      });
+
+      toast({
+        title: "Offer Activated",
+        description: `Special offer (${percent}% off) is now active for this dress.`,
+      });
+      setIsOfferOpen(false);
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        variant: "destructive",
+        title: "Offer Error",
+        description: err.message || "Failed to save offer.",
+      });
+    } finally {
+      setSavingOffer(false);
+    }
+  };
+
+  const handleEndOffer = async () => {
+    if (!design) return;
+    if (!confirm("Are you sure you want to end this offer?")) return;
+
+    try {
+      setSavingOffer(true);
+      await inventoryService.updateDesign(design.id, {
+        offer: null as any,
+      });
+
+      setDesign({
+        ...design,
+        offer: undefined,
+      });
+
+      toast({
+        title: "Offer Ended",
+        description: "Special offer tag has been removed from this dress.",
+      });
+      setIsOfferOpen(false);
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        variant: "destructive",
+        title: "Error Ending Offer",
+        description: err.message || "Failed to remove offer.",
+      });
+    } finally {
+      setSavingOffer(false);
     }
   };
 
@@ -497,9 +656,37 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
           </div>
         </div>
 
-        <Button onClick={() => setIsEditorOpen(true)} className="sm:ml-auto">
-          <FilePen className="mr-2 h-4 w-4" /> Edit Design & Stock
-        </Button>
+        <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+          <Button
+            variant="outline"
+            onClick={() => setIsTaggingOpen(true)}
+            className="border-primary/30 hover:bg-primary/5 text-foreground"
+          >
+            <Tag className="mr-2 h-4 w-4 text-primary" /> Collections
+            {design.customCollection && (
+              <span className="ml-1.5 bg-primary/10 text-primary text-[10px] font-bold px-1.5 py-0.5 rounded">
+                {design.customCollection}
+              </span>
+            )}
+          </Button>
+
+          <Button
+            variant={design.offer?.active ? "default" : "outline"}
+            onClick={() => setIsOfferOpen(true)}
+            className={
+              design.offer?.active
+                ? "bg-rose-600 hover:bg-rose-700 text-white shadow-sm"
+                : "border-rose-500/30 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20"
+            }
+          >
+            <Percent className="mr-1.5 h-4 w-4" />
+            {design.offer?.active ? `${design.offer.discountPercentage}% Off Active` : "Make Offer"}
+          </Button>
+
+          <Button onClick={() => setIsEditorOpen(true)}>
+            <FilePen className="mr-2 h-4 w-4" /> Edit Design & Stock
+          </Button>
+        </div>
       </div>
 
       {/* Top: Quantities Summary Table */}
@@ -948,6 +1135,201 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
           </DialogContent>
         </Dialog>
       )}
+      {/* Collection Tagging Modal */}
+      <Dialog open={isTaggingOpen} onOpenChange={setIsTaggingOpen}>
+        <DialogContent className="sm:max-w-md">
+          <form onSubmit={handleSaveTagging}>
+            <DialogHeader>
+              <DialogTitle className="text-lg font-bold font-headline flex items-center gap-2">
+                <Tag className="h-5 w-5 text-primary" /> Assign Collections
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                Configure default collection and custom collection for this dress.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              {/* Default Collection */}
+              <div className="space-y-1.5">
+                <Label htmlFor="default-collection" className="text-xs font-semibold">
+                  Default Collection <span className="text-destructive">*</span>
+                </Label>
+                <select
+                  id="default-collection"
+                  value={defaultCollection}
+                  onChange={(e) => setDefaultCollection(e.target.value)}
+                  className="w-full h-10 px-3 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                  required
+                >
+                  <option value="Queen's Wardrobe">Queen&apos;s Wardrobe</option>
+                  <option value="King's Wardrobe">King&apos;s Wardrobe</option>
+                </select>
+                <p className="text-[11px] text-muted-foreground">
+                  The primary category in the CeyRaa client balcony.
+                </p>
+              </div>
+
+              {/* Custom Collection */}
+              <div className="space-y-1.5">
+                <Label htmlFor="custom-collection" className="text-xs font-semibold">
+                  Custom Collection (Optional)
+                </Label>
+                <select
+                  id="custom-collection"
+                  value={customCollection}
+                  onChange={(e) => setCustomCollection(e.target.value)}
+                  className="w-full h-10 px-3 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">-- None / No Custom Collection --</option>
+                  {collections.map((c) => (
+                    <option key={c.id} value={c.name}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-muted-foreground">
+                  Dynamic collection created in the Admin Hub Collections section.
+                </p>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsTaggingOpen(false)}
+                disabled={savingTagging}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={savingTagging}>
+                {savingTagging ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...
+                  </>
+                ) : (
+                  "Save Tagging"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Make Offer Modal */}
+      <Dialog open={isOfferOpen} onOpenChange={setIsOfferOpen}>
+        <DialogContent className="sm:max-w-md">
+          <form onSubmit={handleSaveOffer}>
+            <DialogHeader>
+              <DialogTitle className="text-lg font-bold font-headline flex items-center gap-2">
+                <Percent className="h-5 w-5 text-rose-600" /> Special Offer / Discount
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                Apply a percentage discount to showcase this design in CeyRaa&apos;s Exclusive Offers.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              {/* Existing active offer banner */}
+              {design.offer?.active && (
+                <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-400 text-xs flex items-center justify-between">
+                  <div>
+                    <span className="font-bold">Active Offer:</span> {design.offer.discountPercentage}% OFF
+                    <div className="text-[11px] opacity-80 mt-0.5">
+                      Price: LKR {design.offer.offerPrice?.toLocaleString()} (Was LKR {design.offer.originalPrice?.toLocaleString()})
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleEndOffer}
+                    disabled={savingOffer}
+                    className="h-8 text-xs font-semibold"
+                  >
+                    End Offer
+                  </Button>
+                </div>
+              )}
+
+              {/* Price Calculation preview */}
+              <div className="bg-muted/40 p-3.5 rounded-lg border border-border/60 space-y-2 text-xs">
+                <div className="flex justify-between items-center text-muted-foreground">
+                  <span>Base Price:</span>
+                  <span className="font-mono font-semibold text-foreground">
+                    LKR {getBasePrice().toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-muted-foreground">
+                  <span>Discount ({discountPercent || 0}%):</span>
+                  <span className="font-mono text-rose-600 font-semibold">
+                    - LKR {Math.round(getBasePrice() * ((discountPercent || 0) / 100)).toLocaleString()}
+                  </span>
+                </div>
+                <div className="pt-2 border-t border-border/40 flex justify-between items-center font-bold text-sm">
+                  <span>Offer Price:</span>
+                  <span className="font-mono text-emerald-600 dark:text-emerald-400">
+                    LKR {Math.round(getBasePrice() * (1 - (discountPercent || 0) / 100)).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              {/* Discount Percentage Input */}
+              <div className="space-y-1.5">
+                <Label htmlFor="discount-percent" className="text-xs font-semibold">
+                  Discount Percentage (%)
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="discount-percent"
+                    type="number"
+                    min="1"
+                    max="99"
+                    step="1"
+                    value={discountPercent}
+                    onChange={(e) => setDiscountPercent(Number(e.target.value))}
+                    placeholder="e.g. 15"
+                    className="pr-8"
+                    required
+                  />
+                  <span className="absolute right-3 top-2.5 text-muted-foreground text-sm font-semibold">
+                    %
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Enter an integer between 1% and 99%.
+                </p>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsOfferOpen(false)}
+                disabled={savingOffer}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={savingOffer || !discountPercent || discountPercent <= 0}
+                className="bg-rose-600 hover:bg-rose-700 text-white"
+              >
+                {savingOffer ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...
+                  </>
+                ) : design.offer?.active ? (
+                  "Update Offer"
+                ) : (
+                  "Activate Offer"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
