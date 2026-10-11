@@ -53,17 +53,17 @@ export const inventoryService = {
     if (folder) queryParams.append("folder", folder);
     if (orderId) queryParams.append("orderId", orderId);
 
-    const response = await fetch(`/api/upload?${queryParams.toString()}`, {
-      method: "POST",
-      body: formData,
-    });
+    const response = await apiClient.post<{ url: string; publicId: string }>(
+      `/api/upload?${queryParams.toString()}`,
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
+    );
 
-    if (!response.ok) {
-      const errData = await response.json().catch(() => ({}));
-      throw new Error(errData.error || "Failed to upload image");
-    }
-
-    return response.json();
+    return response;
   },
 
   // Confirm Order and Add to Inventory
