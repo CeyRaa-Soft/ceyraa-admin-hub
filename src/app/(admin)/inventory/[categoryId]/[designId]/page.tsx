@@ -22,6 +22,10 @@ import {
   Image as ImageIcon,
   ChevronLeft,
   ChevronRight,
+  Palette,
+  Video,
+  Play,
+  CheckCircle2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
@@ -30,7 +34,13 @@ import type { DressCategory, Design, DesignImage } from "@/types/inventory";
 import { GarmentItemsSummaryTable } from "@/components/GarmentItemsSummaryTable";
 import { DesignEditorForm } from "@/components/DesignEditorForm";
 import Image from "next/image";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 interface DesignDetailPageProps {
   params: Promise<{ categoryId: string; designId: string }>;
@@ -55,6 +65,19 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
 
   // Lightbox gallery state
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  // Swatch Modal State
+  const [swatchModalVariant, setSwatchModalVariant] = useState<{
+    id: string;
+    color: string;
+    swatchUrl?: string;
+  } | null>(null);
+  const [swatchFile, setSwatchFile] = useState<File | null>(null);
+  const [swatchPreview, setSwatchPreview] = useState<string | null>(null);
+  const [uploadingSwatch, setUploadingSwatch] = useState(false);
+
+  // Video / GIF Showcase State
+  const [uploadingVideo, setUploadingVideo] = useState(false);
 
   const loadData = async () => {
     try {
@@ -109,6 +132,19 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
         title: "Upload Limit Exceeded",
         description: `Only the first ${remainingSlots} files will be uploaded (Max ${maxAllowed} total).`,
       });
+    }
+
+    // Validate size (max 5MB per image)
+    for (const f of filesToUpload) {
+      if (f.size > 5 * 1024 * 1024) {
+        toast({
+          variant: "destructive",
+          title: "File Too Large",
+          description: `Image "${f.name}" exceeds the 5MB size limit.`,
+        });
+        e.target.value = "";
+        return;
+      }
     }
 
     try {
@@ -180,6 +216,240 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
     }
   };
 
+  // Swatch Modal Handlers
+  const handleOpenSwatchModal = (variant: any) => {
+    setSwatchModalVariant({
+      id: variant.id,
+      color: variant.color,
+      swatchUrl: variant.swatchUrl,
+    });
+    setSwatchPreview(variant.swatchUrl || null);
+    setSwatchFile(null);
+  };
+
+  const handleSwatchFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validation: Image only & max 3MB
+    if (!file.type.startsWith("image/")) {
+      toast({
+        variant: "destructive",
+        title: "Invalid File",
+        description: "Please select an image file (JPG, PNG, WebP).",
+      });
+      return;
+    }
+
+    if (file.size > 3 * 1024 * 1024) {
+      toast({
+        variant: "destructive",
+        title: "File Too Large",
+        description: "Color pattern swatch image must be smaller than 3MB.",
+      });
+      return;
+    }
+
+    setSwatchFile(file);
+    setSwatchPreview(URL.createObjectURL(file));
+  };
+
+  const handleSaveSwatch = async () => {
+    if (!design || !swatchModalVariant) return;
+
+    try {
+      setUploadingSwatch(true);
+      let newSwatchUrl = swatchModalVariant.swatchUrl;
+      let newSwatchPublicId = "";
+
+      if (swatchFile) {
+        const uploadRes = await inventoryService.uploadImage(
+          swatchFile,
+          design.code,
+          swatchModalVariant.color,
+          "swatches"
+        );
+        newSwatchUrl = uploadRes.url;
+        newSwatchPublicId = uploadRes.publicId;
+      }
+
+      // Update variants array
+      const updatedVariants = (design.variants || []).map((v) => {
+        if (v.id === swatchModalVariant.id || v.color === swatchModalVariant.color) {
+          return {
+            ...v,
+            swatchUrl: newSwatchUrl,
+            swatchPublicId: newSwatchPublicId || v.swatchPublicId,
+          };
+        }
+        return v;
+      });
+
+      await inventoryService.updateDesign(design.id, {
+        variants: updatedVariants,
+      });
+
+      setDesign({ ...design, variants: updatedVariants });
+      setSwatchModalVariant(null);
+      setSwatchFile(null);
+      setSwatchPreview(null);
+
+      toast({
+        title: "Swatch Saved",
+        description: `Color pattern swatch updated for "${swatchModalVariant.color}".`,
+      });
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        variant: "destructive",
+        title: "Save Failed",
+        description: err.message || "Failed to update color swatch.",
+      });
+    } finally {
+      setUploadingSwatch(false);
+    }
+  };
+
+  const handleRemoveSwatch = async () => {
+    if (!design || !swatchModalVariant) return;
+    if (!confirm("Are you sure you want to remove this color swatch pattern?")) return;
+
+    try {
+      setUploadingSwatch(true);
+      const updatedVariants = (design.variants || []).map((v) => {
+        if (v.id === swatchModalVariant.id || v.color === swatchModalVariant.color) {
+          const { swatchUrl, swatchPublicId, ...rest } = v;
+          return rest;
+        }
+        return v;
+      });
+
+      await inventoryService.updateDesign(design.id, {
+        variants: updatedVariants,
+      });
+
+      setDesign({ ...design, variants: updatedVariants });
+      setSwatchModalVariant(null);
+      setSwatchFile(null);
+      setSwatchPreview(null);
+
+      toast({
+        title: "Swatch Removed",
+        description: `Pattern swatch removed for "${swatchModalVariant.color}".`,
+      });
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        variant: "destructive",
+        title: "Removal Failed",
+        description: err.message || "Failed to remove color swatch.",
+      });
+    } finally {
+      setUploadingSwatch(false);
+    }
+  };
+
+  // Video / GIF Showcase Handlers
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!design) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate type: video/* or image/gif
+    const isVideo = file.type.startsWith("video/");
+    const isGif = file.type === "image/gif";
+
+    if (!isVideo && !isGif) {
+      toast({
+        variant: "destructive",
+        title: "Invalid Media",
+        description: "Please upload an MP4, WebM video, or GIF file.",
+      });
+      e.target.value = "";
+      return;
+    }
+
+    // Validate size: max 25MB
+    if (file.size > 25 * 1024 * 1024) {
+      toast({
+        variant: "destructive",
+        title: "File Too Large",
+        description: "Showcase video or GIF must be smaller than 25MB.",
+      });
+      e.target.value = "";
+      return;
+    }
+
+    try {
+      setUploadingVideo(true);
+      const res = await inventoryService.uploadImage(
+        file,
+        design.code,
+        undefined,
+        "videos"
+      );
+
+      await inventoryService.updateDesign(design.id, {
+        mediaVideoUrl: res.url,
+        mediaVideoPublicId: res.publicId,
+      });
+
+      setDesign({
+        ...design,
+        mediaVideoUrl: res.url,
+        mediaVideoPublicId: res.publicId,
+      });
+
+      toast({
+        title: "Showcase Media Uploaded",
+        description: "Dress showcase video/GIF successfully saved.",
+      });
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        variant: "destructive",
+        title: "Upload Failed",
+        description: err.message || "Failed to upload showcase video/GIF.",
+      });
+    } finally {
+      setUploadingVideo(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleRemoveVideo = async () => {
+    if (!design) return;
+    if (!confirm("Are you sure you want to remove this showcase video/GIF?")) return;
+
+    try {
+      setUploadingVideo(true);
+      await inventoryService.updateDesign(design.id, {
+        mediaVideoUrl: undefined,
+        mediaVideoPublicId: undefined,
+      });
+
+      setDesign({
+        ...design,
+        mediaVideoUrl: undefined,
+        mediaVideoPublicId: undefined,
+      });
+
+      toast({
+        title: "Showcase Media Removed",
+        description: "Showcase video/GIF removed successfully.",
+      });
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        variant: "destructive",
+        title: "Removal Failed",
+        description: err.message || "Failed to remove showcase media.",
+      });
+    } finally {
+      setUploadingVideo(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-muted-foreground animate-pulse">
@@ -202,7 +472,7 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
   const variants = design.variants || [];
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
+    <div className="space-y-8 max-w-5xl mx-auto pb-12">
       {/* Header section */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-6 border-border/60">
         <div className="flex items-center gap-4">
@@ -279,44 +549,94 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
               return (
                 <Card key={variant.id || colorKey} className="overflow-hidden border border-border/80 shadow-sm bg-card hover:shadow-md transition-shadow">
                   <CardHeader className="bg-muted/15 border-b border-border/40 py-3 px-5 flex flex-row items-center justify-between">
-                    <div>
-                      <CardTitle className="text-base font-bold text-foreground">
-                        Color Variant: <span className="text-primary font-headline">{colorKey}</span>
-                      </CardTitle>
-                      <CardDescription className="text-xs">
-                        Sizes: {variant.sizes.map((s) => s.size).join(", ") || "None"}
-                      </CardDescription>
+                    <div className="flex items-center gap-3">
+                      {/* Swatch Trigger Icon / Circle */}
+                      <button
+                        type="button"
+                        onClick={() => handleOpenSwatchModal(variant)}
+                        title={variant.swatchUrl ? "Edit fabric/color pattern swatch" : "Add fabric/color pattern swatch"}
+                        className="relative group/swatch w-9 h-9 rounded-full border-2 border-primary/40 hover:border-primary transition-all duration-200 overflow-hidden flex items-center justify-center bg-muted/60 shadow-inner flex-shrink-0"
+                      >
+                        {variant.swatchUrl ? (
+                          <>
+                            <Image
+                              src={variant.swatchUrl}
+                              alt={`${colorKey} swatch`}
+                              fill
+                              className="object-cover"
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/swatch:opacity-100 transition-opacity flex items-center justify-center">
+                              <Palette className="h-3.5 w-3.5 text-white" />
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center text-muted-foreground group-hover/swatch:text-primary transition-colors">
+                            <Palette className="h-4 w-4" />
+                          </div>
+                        )}
+                      </button>
+
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <CardTitle className="text-base font-bold text-foreground">
+                            Color Variant: <span className="text-primary font-headline">{colorKey}</span>
+                          </CardTitle>
+                          {variant.swatchUrl && (
+                            <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                              Swatch Added
+                            </span>
+                          )}
+                        </div>
+                        <CardDescription className="text-xs">
+                          Sizes: {variant.sizes.map((s) => s.size).join(", ") || "None"}
+                        </CardDescription>
+                      </div>
                     </div>
 
-                    {colorImages.length < 3 && (
-                      <div className="relative">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          multiple
-                          id={`file-upload-${variant.id || colorKey}`}
-                          className="hidden"
-                          onChange={(e) => handleImageUpload(colorKey, e)}
-                          disabled={uploadingColors[colorKey]}
-                        />
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          asChild
-                          disabled={uploadingColors[colorKey]}
-                          className="h-8 text-xs gap-1.5"
-                        >
-                          <label htmlFor={`file-upload-${variant.id || colorKey}`} className="cursor-pointer">
-                            {uploadingColors[colorKey] ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Upload className="h-3.5 w-3.5" />
-                            )}
-                            Add Photo ({colorImages.length}/3)
-                          </label>
-                        </Button>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleOpenSwatchModal(variant)}
+                        className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-primary border hover:bg-muted/60"
+                        title="Configure pattern swatch for client catalog selector"
+                      >
+                        <Palette className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">
+                          {variant.swatchUrl ? "Edit Swatch" : "Add Swatch"}
+                        </span>
+                      </Button>
+
+                      {colorImages.length < 3 && (
+                        <div className="relative">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            id={`file-upload-${variant.id || colorKey}`}
+                            className="hidden"
+                            onChange={(e) => handleImageUpload(colorKey, e)}
+                            disabled={uploadingColors[colorKey]}
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            asChild
+                            disabled={uploadingColors[colorKey]}
+                            className="h-8 text-xs gap-1.5"
+                          >
+                            <label htmlFor={`file-upload-${variant.id || colorKey}`} className="cursor-pointer">
+                              {uploadingColors[colorKey] ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Upload className="h-3.5 w-3.5" />
+                              )}
+                              Add Photo ({colorImages.length}/3)
+                            </label>
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   </CardHeader>
                   <CardContent className="p-5">
                     {colorImages.length === 0 ? (
@@ -364,7 +684,199 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
             })}
           </div>
         )}
+
+        {/* Dress Video / GIF Showcase Section */}
+        <Card className="border border-border/80 shadow-sm bg-card overflow-hidden mt-8">
+          <CardHeader className="bg-muted/15 border-b border-border/40 py-4 px-6 flex flex-row items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                <Video className="h-5 w-5" />
+              </div>
+              <div>
+                <CardTitle className="text-base font-bold text-foreground">
+                  Dress Video or GIF Showcase
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Upload 1 animated video or GIF to showcase dress motion & drape in the client app (Max 25MB).
+                </CardDescription>
+              </div>
+            </div>
+
+            <div className="relative">
+              <input
+                type="file"
+                accept="video/mp4,video/webm,image/gif"
+                id="showcase-media-upload"
+                className="hidden"
+                onChange={handleVideoUpload}
+                disabled={uploadingVideo}
+              />
+              <Button
+                variant={design.mediaVideoUrl ? "outline" : "default"}
+                size="sm"
+                asChild
+                disabled={uploadingVideo}
+                className="h-8 text-xs gap-1.5"
+              >
+                <label htmlFor="showcase-media-upload" className="cursor-pointer">
+                  {uploadingVideo ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Upload className="h-3.5 w-3.5" />
+                  )}
+                  {design.mediaVideoUrl ? "Change Media" : "Upload Video / GIF"}
+                </label>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-6">
+            {design.mediaVideoUrl ? (
+              <div className="flex flex-col md:flex-row gap-6 items-start">
+                <div className="relative max-w-sm w-full aspect-[9/16] sm:aspect-[3/4] rounded-2xl overflow-hidden border border-border/80 bg-black/90 shadow-md">
+                  {design.mediaVideoUrl.match(/\.(gif)(\?.*)?$/i) ? (
+                    <img
+                      src={design.mediaVideoUrl}
+                      alt="Dress GIF showcase"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <video
+                      src={design.mediaVideoUrl}
+                      controls
+                      loop
+                      muted
+                      autoPlay
+                      playsInline
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                </div>
+
+                <div className="flex-1 space-y-4">
+                  <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-semibold text-sm">
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>Showcase Media Active</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    This media is ready to be displayed in the client web app as an animated half-screen showcase preview.
+                  </p>
+                  <div className="pt-2">
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleRemoveVideo}
+                      disabled={uploadingVideo}
+                      className="gap-1.5"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Remove Video / GIF
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-10 border border-dashed border-border/60 rounded-xl text-muted-foreground text-center px-4">
+                <Video className="h-10 w-10 mb-3 stroke-[1.2] text-muted-foreground/40" />
+                <p className="text-sm font-medium text-foreground/80">No showcase video or GIF uploaded</p>
+                <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+                  Add an MP4, WebM, or GIF loop to give customers a real-life view of how the garment looks and moves.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
+
+      {/* Swatch Upload & Adjustment Modal */}
+      {swatchModalVariant && (
+        <Dialog open={true} onOpenChange={(open) => { if (!open) setSwatchModalVariant(null); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Palette className="h-5 w-5 text-primary" />
+                Color Swatch: {swatchModalVariant.color}
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                Upload a fabric texture or pattern swatch. This will be shown as a small circle icon in the client catalog color picker.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-6 py-4">
+              <div className="flex flex-col items-center justify-center gap-4">
+                {/* Circular preview */}
+                <div className="relative w-24 h-24 rounded-full overflow-hidden border-4 border-primary/40 shadow-lg bg-muted flex items-center justify-center">
+                  {swatchPreview ? (
+                    <img
+                      src={swatchPreview}
+                      alt="Swatch preview"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Palette className="h-8 w-8 text-muted-foreground/50" />
+                  )}
+                </div>
+                <span className="text-xs text-muted-foreground font-mono">
+                  {swatchPreview ? "Client Circle Preview (200x200 WebP)" : "No image selected"}
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  id="swatch-file-input"
+                  className="hidden"
+                  onChange={handleSwatchFileChange}
+                />
+                <Button variant="outline" asChild className="w-full cursor-pointer gap-2">
+                  <label htmlFor="swatch-file-input">
+                    <Upload className="h-4 w-4" />
+                    {swatchPreview ? "Choose Different Pattern Image" : "Select Pattern Image"}
+                  </label>
+                </Button>
+                <p className="text-[11px] text-muted-foreground text-center">
+                  Supports JPG, PNG, WebP up to 3MB. Image will be centered and optimized to a smooth circle icon.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center pt-2 border-t">
+              {swatchModalVariant.swatchUrl ? (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  type="button"
+                  onClick={handleRemoveSwatch}
+                  disabled={uploadingSwatch}
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove
+                </Button>
+              ) : (
+                <div />
+              )}
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSwatchModalVariant(null)}
+                  disabled={uploadingSwatch}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSaveSwatch}
+                  disabled={uploadingSwatch || (!swatchFile && !swatchPreview)}
+                  className="gap-1.5"
+                >
+                  {uploadingSwatch && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  Save Swatch
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Editor Modal dialog */}
       {isEditorOpen && (
@@ -439,3 +951,4 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
     </div>
   );
 }
+
