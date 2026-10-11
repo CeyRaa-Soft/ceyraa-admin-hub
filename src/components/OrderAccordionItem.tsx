@@ -62,6 +62,12 @@ const statusVariant: Record<
   Delivered: "outline",
 };
 
+const DEFAULT_ORDER_CATEGORIES: OrderCategory[] = [
+  { id: "production", name: "Sewing & Tailoring (Garments)", items: [] },
+  { id: "supplies", name: "Fabrics & Accessories (Materials)", items: [] },
+  { id: "other", name: "Other Expenses (Courier, Packaging, etc.)", items: [] },
+];
+
 export const OrderAccordionItem: React.FC<OrderAccordionItemProps> = ({
   order,
   categories,
@@ -76,14 +82,34 @@ export const OrderAccordionItem: React.FC<OrderAccordionItemProps> = ({
     string | null
   >(null);
 
+  const initialCategories =
+    categories && categories.length > 0 ? categories : DEFAULT_ORDER_CATEGORIES;
+
   // Maintain local categories state to support multiple items addition before save
-  const [localCategories, setLocalCategories] = useState<OrderCategory[]>(categories);
+  const [localCategories, setLocalCategories] =
+    useState<OrderCategory[]>(initialCategories);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   const { toast } = useToast();
-  const [stageImages, setStageImages] = useState<{ url: string; publicId: string }[]>(order.stageImages || []);
+  const [stageImages, setStageImages] = useState<{ url: string; publicId: string }[]>(
+    order.stageImages || []
+  );
   const [uploadingStages, setUploadingStages] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  // Sync stage images when order changes
+  useEffect(() => {
+    setStageImages(order.stageImages || []);
+  }, [order.stageImages]);
+
+  // Sync with parent properties updates only when there are no unsaved changes
+  useEffect(() => {
+    if (!hasUnsavedChanges) {
+      setLocalCategories(
+        categories && categories.length > 0 ? categories : DEFAULT_ORDER_CATEGORIES
+      );
+    }
+  }, [categories, hasUnsavedChanges]);
 
   const handleStageImagesUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -167,12 +193,6 @@ export const OrderAccordionItem: React.FC<OrderAccordionItemProps> = ({
     }
   };
 
-  // Sync with parent properties updates only when there are no unsaved changes
-  useEffect(() => {
-    if (!hasUnsavedChanges) {
-      setLocalCategories(categories);
-    }
-  }, [categories, hasUnsavedChanges]);
 
   const getOrderTotal = () => {
     let total = 0;
