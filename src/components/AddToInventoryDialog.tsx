@@ -230,7 +230,7 @@ export function AddToInventoryDialog({
     const existingCount = mapping.images.filter(
       (img) => img.color === colorKey,
     ).length;
-    const maxAllowed = 3;
+    const maxAllowed = 5;
     const remainingSlots = maxAllowed - existingCount;
 
     if (remainingSlots <= 0) {
@@ -713,7 +713,7 @@ export function AddToInventoryDialog({
                                         })}
 
                                         {/* Upload Button */}
-                                        {colorImages.length < 3 && (
+                                        {colorImages.length < 5 && (
                                           <div className="relative">
                                             <input
                                               type="file"

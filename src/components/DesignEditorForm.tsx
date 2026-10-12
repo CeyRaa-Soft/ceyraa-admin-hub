@@ -129,7 +129,7 @@ export function DesignEditorForm({
       if (effectiveVariants.length === 1) return true;
       return false;
     }).length;
-    const maxAllowed = 3;
+    const maxAllowed = 5;
     const remainingSlots = maxAllowed - existingCount;
 
     if (remainingSlots <= 0) {
@@ -350,7 +350,7 @@ export function DesignEditorForm({
                             Color: <span className="text-primary">{colorKey}</span>
                           </span>
                           
-                          {colorImages.length < 3 && (
+                          {colorImages.length < 5 && (
                             <div className="relative">
                               <input
                                 type="file"

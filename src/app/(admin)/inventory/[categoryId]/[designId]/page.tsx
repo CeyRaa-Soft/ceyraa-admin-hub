@@ -84,6 +84,127 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
 
   // Video / GIF Showcase State
   const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [uploadingVariantVideos, setUploadingVariantVideos] = useState<Record<string, boolean>>({});
+
+  // Per-color variant video/GIF upload handler
+  const handleVariantVideoUpload = async (
+    variantIdOrColor: string,
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    if (!design) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const isVideo = file.type.startsWith("video/");
+    const isGif = file.type === "image/gif";
+
+    if (!isVideo && !isGif) {
+      toast({
+        variant: "destructive",
+        title: "Invalid Media",
+        description: "Please upload an MP4, WebM video, or GIF file.",
+      });
+      e.target.value = "";
+      return;
+    }
+
+    if (file.size > 25 * 1024 * 1024) {
+      toast({
+        variant: "destructive",
+        title: "File Too Large",
+        description: "Showcase video or GIF must be smaller than 25MB.",
+      });
+      e.target.value = "";
+      return;
+    }
+
+    try {
+      setUploadingVariantVideos((prev) => ({ ...prev, [variantIdOrColor]: true }));
+      const res = await inventoryService.uploadImage(
+        file,
+        design.code,
+        variantIdOrColor,
+        "videos"
+      );
+
+      const updatedVariants = (design.variants || []).map((v) => {
+        if (v.id === variantIdOrColor || v.color === variantIdOrColor) {
+          return {
+            ...v,
+            mediaVideoUrl: res.url,
+            mediaVideoPublicId: res.publicId,
+          };
+        }
+        return v;
+      });
+
+      await inventoryService.updateDesign(design.id, {
+        variants: updatedVariants,
+      });
+
+      setDesign({
+        ...design,
+        variants: updatedVariants,
+      });
+
+      toast({
+        title: "Variant Media Saved",
+        description: "Color variant video / GIF uploaded successfully.",
+      });
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        variant: "destructive",
+        title: "Upload Failed",
+        description: err.message || "Failed to upload video / GIF.",
+      });
+    } finally {
+      setUploadingVariantVideos((prev) => ({ ...prev, [variantIdOrColor]: false }));
+      e.target.value = "";
+    }
+  };
+
+  const handleRemoveVariantVideo = async (variantIdOrColor: string) => {
+    if (!design) return;
+    if (!confirm("Are you sure you want to remove the video/GIF for this color variant?")) return;
+
+    try {
+      setUploadingVariantVideos((prev) => ({ ...prev, [variantIdOrColor]: true }));
+      const updatedVariants = (design.variants || []).map((v) => {
+        if (v.id === variantIdOrColor || v.color === variantIdOrColor) {
+          return {
+            ...v,
+            mediaVideoUrl: null,
+            mediaVideoPublicId: null,
+          };
+        }
+        return v;
+      });
+
+      await inventoryService.updateDesign(design.id, {
+        variants: updatedVariants,
+      });
+
+      setDesign({
+        ...design,
+        variants: updatedVariants,
+      });
+
+      toast({
+        title: "Variant Media Removed",
+        description: "Color variant video / GIF removed successfully.",
+      });
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        variant: "destructive",
+        title: "Removal Failed",
+        description: err.message || "Failed to remove video / GIF.",
+      });
+    } finally {
+      setUploadingVariantVideos((prev) => ({ ...prev, [variantIdOrColor]: false }));
+    }
+  };
 
   // Collections State
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -278,7 +399,7 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
       if (design.variants?.length === 1) return true;
       return false;
     }).length;
-    const maxAllowed = 3;
+    const maxAllowed = 5;
     const remainingSlots = maxAllowed - existingCount;
 
     if (remainingSlots <= 0) {
@@ -718,7 +839,7 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
             <h2 className="text-xl font-bold font-headline text-foreground">Design Images Library</h2>
           </div>
           <span className="text-xs text-muted-foreground italic">
-            Up to 3 images per color variant
+            Up to 5 images per color variant
           </span>
         </div>
 
@@ -807,7 +928,39 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
                         </span>
                       </Button>
 
-                      {colorImages.length < 3 && (
+                      {/* Per-Color GIF / Video Upload Button */}
+                      <div className="relative">
+                        <input
+                          type="file"
+                          accept="video/mp4,video/webm,image/gif"
+                          id={`video-upload-${variant.id || colorKey}`}
+                          className="hidden"
+                          onChange={(e) => handleVariantVideoUpload(variant.id || colorKey, e)}
+                          disabled={uploadingVariantVideos[variant.id || colorKey]}
+                        />
+                        <Button
+                          variant={variant.mediaVideoUrl ? "secondary" : "outline"}
+                          size="sm"
+                          asChild
+                          disabled={uploadingVariantVideos[variant.id || colorKey]}
+                          className="h-8 text-xs gap-1.5"
+                          title="Upload animated video or GIF for this color"
+                        >
+                          <label htmlFor={`video-upload-${variant.id || colorKey}`} className="cursor-pointer">
+                            {uploadingVariantVideos[variant.id || colorKey] ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Video className="h-3.5 w-3.5 text-purple-500" />
+                            )}
+                            <span className="hidden sm:inline">
+                              {variant.mediaVideoUrl ? "Change GIF/Video" : "Add GIF/Video"}
+                            </span>
+                            <span className="sm:hidden">GIF</span>
+                          </label>
+                        </Button>
+                      </div>
+
+                      {colorImages.length < 5 && (
                         <div className="relative">
                           <input
                             type="file"
@@ -831,51 +984,91 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
                               ) : (
                                 <Upload className="h-3.5 w-3.5" />
                               )}
-                              Add Photo ({colorImages.length}/3)
+                              Add Photo ({colorImages.length}/5)
                             </label>
                           </Button>
                         </div>
                       )}
                     </div>
                   </CardHeader>
-                  <CardContent className="p-5">
-                    {colorImages.length === 0 ? (
+                  <CardContent className="p-5 space-y-4">
+                    {/* Media grid: Photos + Per-Variant Video/GIF */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                      {/* Photos */}
+                      {colorImages.map((img) => (
+                        <div
+                          key={img.url}
+                          className="relative group aspect-[3/4] rounded-xl overflow-hidden border border-border/80 bg-muted/20 shadow-sm cursor-zoom-in"
+                          onClick={() => setLightboxIndex(img.originalIndex)}
+                        >
+                          <Image
+                            src={img.url}
+                            alt={`${colorKey} variant photo`}
+                            fill
+                            sizes="(max-width: 768px) 50vw, 20vw"
+                            className="object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2.5">
+                            <Button
+                              variant="destructive"
+                              size="icon"
+                              type="button"
+                              className="h-7 w-7 rounded-full ml-auto shadow-md"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveImage(img.originalIndex);
+                              }}
+                              title="Delete photo"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* Per-variant Video / GIF Slot if present */}
+                      {variant.mediaVideoUrl && (
+                        <div className="relative group aspect-[3/4] rounded-xl overflow-hidden border-2 border-purple-500/50 bg-black/90 shadow-md">
+                          {variant.mediaVideoUrl.match(/\.(gif)(\?.*)?$/i) ? (
+                            <img
+                              src={variant.mediaVideoUrl}
+                              alt={`${colorKey} GIF`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <video
+                              src={variant.mediaVideoUrl}
+                              controls
+                              loop
+                              muted
+                              autoPlay
+                              playsInline
+                              className="w-full h-full object-cover"
+                            />
+                          )}
+                          <div className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded-full bg-purple-600/90 text-white text-[10px] font-bold tracking-wider uppercase">
+                            GIF / Video
+                          </div>
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2.5">
+                            <Button
+                              variant="destructive"
+                              size="icon"
+                              type="button"
+                              className="h-7 w-7 rounded-full ml-auto shadow-md"
+                              onClick={() => handleRemoveVariantVideo(variant.id || colorKey)}
+                              title="Remove video/GIF for this color"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {colorImages.length === 0 && !variant.mediaVideoUrl && (
                       <div className="flex flex-col items-center justify-center py-8 border border-dashed border-border/60 rounded-xl text-muted-foreground/60 italic text-sm">
                         <ImageIcon className="h-8 w-8 mb-2 stroke-[1.2] text-muted-foreground/40" />
-                        No photos added for this color variant.
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {colorImages.map((img) => (
-                          <div
-                            key={img.url}
-                            className="relative group aspect-[3/4] rounded-xl overflow-hidden border border-border/80 bg-muted/20 shadow-sm cursor-zoom-in"
-                            onClick={() => setLightboxIndex(img.originalIndex)}
-                          >
-                            <Image
-                              src={img.url}
-                              alt={`${colorKey} variant photo`}
-                              fill
-                              sizes="(max-width: 768px) 50vw, 20vw"
-                              className="object-cover transition-transform duration-300 group-hover:scale-105"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2.5">
-                              <Button
-                                variant="destructive"
-                                size="icon"
-                                type="button"
-                                className="h-7 w-7 rounded-full ml-auto shadow-md"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleRemoveImage(img.originalIndex);
-                                }}
-                                title="Delete photo"
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
+                        No photos or GIF added for this color variant.
                       </div>
                     )}
                   </CardContent>
