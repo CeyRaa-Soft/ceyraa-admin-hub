@@ -29,6 +29,7 @@ import {
   Tag,
   Percent,
   Layers,
+  Ruler,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
@@ -47,6 +48,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 interface DesignDetailPageProps {
   params: Promise<{ categoryId: string; designId: string }>;
@@ -218,6 +220,13 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
   const [discountPercent, setDiscountPercent] = useState<number>(10);
   const [savingOffer, setSavingOffer] = useState(false);
 
+  // Size Chart State
+  const [isSizeChartOpen, setIsSizeChartOpen] = useState(false);
+  const [sizeChartText, setSizeChartText] = useState<string>("");
+  const [sizeChartFile, setSizeChartFile] = useState<File | null>(null);
+  const [sizeChartPreview, setSizeChartPreview] = useState<string | null>(null);
+  const [savingSizeChart, setSavingSizeChart] = useState(false);
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -232,6 +241,8 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
       if (designData) {
         setDefaultCollection(designData.defaultCollection || "Queen's Wardrobe");
         setCustomCollection(designData.customCollection || "");
+        setSizeChartText(designData.sizeChartText || "");
+        setSizeChartPreview(designData.sizeChartImageUrl || null);
         if (designData.offer?.discountPercentage) {
           setDiscountPercent(designData.offer.discountPercentage);
         }
@@ -736,6 +747,125 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
     }
   };
 
+  // Size Chart Handlers
+  const handleSizeChartFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast({
+        variant: "destructive",
+        title: "Invalid File",
+        description: "Please upload an image file (PNG, JPG, WebP).",
+      });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        variant: "destructive",
+        title: "File Too Large",
+        description: "Size chart image must be under 5MB.",
+      });
+      return;
+    }
+
+    setSizeChartFile(file);
+    setSizeChartPreview(URL.createObjectURL(file));
+  };
+
+  const handleSaveSizeChart = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!design) return;
+
+    try {
+      setSavingSizeChart(true);
+      let imageUrl = design.sizeChartImageUrl;
+      let publicId = design.sizeChartPublicId;
+
+      if (sizeChartFile) {
+        const uploadRes = await inventoryService.uploadImage(
+          sizeChartFile,
+          design.code,
+          "size-chart",
+          "size-charts"
+        );
+        imageUrl = uploadRes.url;
+        publicId = uploadRes.publicId;
+      }
+
+      await inventoryService.updateDesign(design.id, {
+        sizeChartText: sizeChartText.trim() || null,
+        sizeChartImageUrl: imageUrl || null,
+        sizeChartPublicId: publicId || null,
+      });
+
+      setDesign({
+        ...design,
+        sizeChartText: sizeChartText.trim() || null,
+        sizeChartImageUrl: imageUrl || null,
+        sizeChartPublicId: publicId || null,
+      });
+
+      setSizeChartFile(null);
+      setIsSizeChartOpen(false);
+
+      toast({
+        title: "Size Chart Saved",
+        description: "Size chart guidance and image updated successfully.",
+      });
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        variant: "destructive",
+        title: "Save Failed",
+        description: err.message || "Failed to update size chart.",
+      });
+    } finally {
+      setSavingSizeChart(false);
+    }
+  };
+
+  const handleRemoveSizeChart = async () => {
+    if (!design) return;
+    if (!confirm("Are you sure you want to remove the size chart guidance and image?")) return;
+
+    try {
+      setSavingSizeChart(true);
+      await inventoryService.updateDesign(design.id, {
+        sizeChartText: null,
+        sizeChartImageUrl: null,
+        sizeChartPublicId: null,
+      });
+
+      setDesign({
+        ...design,
+        sizeChartText: null,
+        sizeChartImageUrl: null,
+        sizeChartPublicId: null,
+      });
+
+      setSizeChartText("");
+      setSizeChartFile(null);
+      setSizeChartPreview(null);
+      setIsSizeChartOpen(false);
+
+      toast({
+        title: "Size Chart Removed",
+        description: "Size chart removed successfully.",
+      });
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        variant: "destructive",
+        title: "Removal Failed",
+        description: err.message || "Failed to remove size chart.",
+      });
+    } finally {
+      setSavingSizeChart(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-muted-foreground animate-pulse">
@@ -808,6 +938,19 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
           >
             <Percent className="mr-1.5 h-4 w-4" />
             {design.offer?.active ? `${design.offer.discountPercentage}% Off Active` : "Make Offer"}
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={() => setIsSizeChartOpen(true)}
+            className="border-indigo-500/30 hover:bg-indigo-50 dark:hover:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400"
+          >
+            <Ruler className="mr-2 h-4 w-4" /> Size Chart
+            {(design.sizeChartText || design.sizeChartImageUrl) && (
+              <span className="ml-1.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                Active
+              </span>
+            )}
           </Button>
 
           <Button onClick={() => setIsEditorOpen(true)}>
@@ -1609,6 +1752,135 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
                   "Activate Offer"
                 )}
               </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Size Chart Modal */}
+      <Dialog open={isSizeChartOpen} onOpenChange={setIsSizeChartOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <form onSubmit={handleSaveSizeChart}>
+            <DialogHeader>
+              <DialogTitle className="text-lg font-bold font-headline flex items-center gap-2">
+                <Ruler className="h-5 w-5 text-indigo-600" /> Size Chart & Fitting Guide
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                Add dress measurement guidance text and an optional size chart diagram or photo for customers in CeyRaa.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              {/* Guidance / Measurement Notes */}
+              <div className="space-y-1.5">
+                <Label htmlFor="size-chart-text" className="text-xs font-semibold">
+                  Size Guide & Measurement Notes
+                </Label>
+                <Textarea
+                  id="size-chart-text"
+                  rows={4}
+                  value={sizeChartText}
+                  onChange={(e) => setSizeChartText(e.target.value)}
+                  placeholder="e.g. Model is 5'8 wearing size S. Chest: 34'', Waist: 28'', Length: 42''. Fits true to size with a comfortable relaxed drape."
+                  className="text-xs leading-relaxed resize-none"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Text instructions, fit notes, model height, or measurement points displayed on the sidebar.
+                </p>
+              </div>
+
+              {/* Size Chart Image Upload */}
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold">Size Chart Image / Diagram</Label>
+                {sizeChartPreview ? (
+                  <div className="relative rounded-xl overflow-hidden border border-border/80 bg-muted/20 p-2 space-y-2">
+                    <div className="relative aspect-[4/3] w-full rounded-lg overflow-hidden bg-black/50">
+                      <img
+                        src={sizeChartPreview}
+                        alt="Size chart preview"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-muted-foreground truncate">
+                        {sizeChartFile ? sizeChartFile.name : "Current Size Chart Image"}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSizeChartFile(null);
+                          setSizeChartPreview(null);
+                        }}
+                        className="text-destructive h-7 text-xs hover:text-destructive"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove Photo
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="border border-dashed border-border/80 rounded-xl p-5 text-center bg-muted/10 hover:bg-muted/20 transition-colors">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      id="size-chart-file"
+                      className="hidden"
+                      onChange={handleSizeChartFileChange}
+                    />
+                    <label htmlFor="size-chart-file" className="cursor-pointer block space-y-2">
+                      <div className="w-10 h-10 rounded-full bg-indigo-500/10 text-indigo-600 flex items-center justify-center mx-auto">
+                        <Upload className="h-5 w-5" />
+                      </div>
+                      <div className="text-xs font-semibold text-foreground">
+                        Upload Size Chart Image
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        PNG, JPG or WebP up to 5MB. Measurement table or garment dimension graphic.
+                      </p>
+                    </label>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <DialogFooter className="flex items-center justify-between sm:justify-between w-full">
+              {(design.sizeChartText || design.sizeChartImageUrl) ? (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleRemoveSizeChart}
+                  disabled={savingSizeChart}
+                  className="text-xs"
+                >
+                  Clear Guide
+                </Button>
+              ) : <div />}
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsSizeChartOpen(false)}
+                  disabled={savingSizeChart}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={savingSizeChart}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                >
+                  {savingSizeChart ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...
+                    </>
+                  ) : (
+                    "Save Size Chart"
+                  )}
+                </Button>
+              </div>
             </DialogFooter>
           </form>
         </DialogContent>

@@ -41,6 +41,9 @@ export type Design = {
   images: DesignImage[]; // images uploaded for each color variant
   mediaVideoUrl?: string | null; // Showcase video or GIF
   mediaVideoPublicId?: string | null;
+  sizeChartText?: string | null;
+  sizeChartImageUrl?: string | null;
+  sizeChartPublicId?: string | null;
   defaultCollection?: "Queen's Wardrobe" | "King's Wardrobe" | null;
   customCollection?: string | null; // name of custom collection
   offer?: DesignOffer | null;
