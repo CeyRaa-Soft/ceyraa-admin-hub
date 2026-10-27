@@ -26,6 +26,7 @@ import {
   Video,
   Play,
   CheckCircle2,
+  Check,
   Tag,
   Percent,
   Layers,
@@ -34,7 +35,13 @@ import {
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { inventoryService } from "@/services/inventory.service";
-import type { DressCategory, Design, DesignImage, Collection } from "@/types/inventory";
+import {
+  type DressCategory,
+  type Design,
+  type DesignImage,
+  type Collection,
+  AVAILABLE_SIZES,
+} from "@/types/inventory";
 import { GarmentItemsSummaryTable } from "@/components/GarmentItemsSummaryTable";
 import { DesignEditorForm } from "@/components/DesignEditorForm";
 import Image from "next/image";
@@ -224,7 +231,14 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
   const [sizeChartText, setSizeChartText] = useState<string>("");
   const [sizeChartFile, setSizeChartFile] = useState<File | null>(null);
   const [sizeChartPreview, setSizeChartPreview] = useState<string | null>(null);
+  const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
   const [savingSizeChart, setSavingSizeChart] = useState(false);
+
+  const toggleSize = (sz: string) => {
+    setSelectedSizes((prev) =>
+      prev.includes(sz) ? prev.filter((s) => s !== sz) : [...prev, sz]
+    );
+  };
 
   const loadData = async () => {
     try {
@@ -242,6 +256,19 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
         setCustomCollection(designData.customCollection || "");
         setSizeChartText(designData.sizeChartText || "");
         setSizeChartPreview(designData.sizeChartImageUrl || null);
+        if (designData.availableSizes && Array.isArray(designData.availableSizes)) {
+          setSelectedSizes(designData.availableSizes);
+        } else {
+          // Infer from existing variant sizes if available
+          const existingVariantSizes = Array.from(
+            new Set(
+              (designData.variants || []).flatMap((v: any) =>
+                (v.sizes || []).map((s: any) => s.size).filter(Boolean)
+              )
+            )
+          ) as string[];
+          setSelectedSizes(existingVariantSizes);
+        }
         if (designData.offer?.discountPercentage) {
           setDiscountPercent(designData.offer.discountPercentage);
         }
@@ -694,17 +721,41 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
         publicId = uploadRes.publicId;
       }
 
-      await inventoryService.updateDesign(design.id, {
+      // Synchronize variants to include the chosen sizes
+      const updatedVariants = (design.variants || []).map((v) => {
+        if (selectedSizes.length === 0) return v;
+        const currentSizes = v.sizes || [];
+        const newSizes = selectedSizes.map((sz) => {
+          const existing = currentSizes.find(
+            (s) => s.size.trim().toLowerCase() === sz.trim().toLowerCase()
+          );
+          return (
+            existing || {
+              size: sz,
+              quantity: 0,
+              unitPrice: currentSizes[0]?.unitPrice || 0,
+            }
+          );
+        });
+        return { ...v, sizes: newSizes };
+      });
+
+      const payloadToUpdate: any = {
         sizeChartText: sizeChartText.trim() || null,
         sizeChartImageUrl: imageUrl || null,
         sizeChartPublicId: publicId || null,
-      });
+        availableSizes: selectedSizes.length > 0 ? selectedSizes : null,
+      };
+
+      if (updatedVariants.length > 0) {
+        payloadToUpdate.variants = updatedVariants;
+      }
+
+      await inventoryService.updateDesign(design.id, payloadToUpdate);
 
       setDesign({
         ...design,
-        sizeChartText: sizeChartText.trim() || null,
-        sizeChartImageUrl: imageUrl || null,
-        sizeChartPublicId: publicId || null,
+        ...payloadToUpdate,
       });
 
       setSizeChartFile(null);
@@ -712,7 +763,7 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
 
       toast({
         title: "Size Chart Saved",
-        description: "Size chart guidance and image updated successfully.",
+        description: "Size chart guidance, sizes, and diagram updated successfully.",
       });
     } catch (err: any) {
       console.error(err);
@@ -728,7 +779,7 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
 
   const handleRemoveSizeChart = async () => {
     if (!design) return;
-    if (!confirm("Are you sure you want to remove the size chart guidance and image?")) return;
+    if (!confirm("Are you sure you want to remove the size chart guidance, sizes, and image?")) return;
 
     try {
       setSavingSizeChart(true);
@@ -736,6 +787,7 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
         sizeChartText: null,
         sizeChartImageUrl: null,
         sizeChartPublicId: null,
+        availableSizes: null,
       });
 
       setDesign({
@@ -743,11 +795,13 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
         sizeChartText: null,
         sizeChartImageUrl: null,
         sizeChartPublicId: null,
+        availableSizes: null,
       });
 
       setSizeChartText("");
       setSizeChartFile(null);
       setSizeChartPreview(null);
+      setSelectedSizes([]);
       setIsSizeChartOpen(false);
 
       toast({
@@ -850,10 +904,12 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
             onClick={() => setIsSizeChartOpen(true)}
             className="border-indigo-500/30 hover:bg-indigo-50 dark:hover:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400"
           >
-            <Ruler className="mr-2 h-4 w-4" /> Size Chart
-            {(design.sizeChartText || design.sizeChartImageUrl) && (
+            <Ruler className="mr-2 h-4 w-4" /> Size Chart & Sizes
+            {(design.sizeChartText || design.sizeChartImageUrl || (design.availableSizes && design.availableSizes.length > 0)) && (
               <span className="ml-1.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                Active
+                {design.availableSizes && design.availableSizes.length > 0
+                  ? `${design.availableSizes.length} Sizes`
+                  : "Active"}
               </span>
             )}
           </Button>
@@ -1575,7 +1631,82 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 py-4 max-h-[75vh] overflow-y-auto pr-1">
+              {/* Available Sizes Selection */}
+              <div className="space-y-2.5 p-3.5 rounded-xl border border-indigo-500/20 bg-indigo-50/30 dark:bg-indigo-950/20">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <span>Available Garment Sizes</span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-600 text-white">
+                      {selectedSizes.length} selected
+                    </span>
+                  </Label>
+                  <div className="flex items-center gap-2 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSizes(["XS", "S", "M", "L", "XL"])}
+                      className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
+                    >
+                      XS - XL
+                    </button>
+                    <span className="text-muted-foreground">•</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSizes(["Free Size"])}
+                      className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
+                    >
+                      Free Size
+                    </button>
+                    <span className="text-muted-foreground">•</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedSizes([
+                          "Free Size",
+                          "Free Size - Small",
+                          "Free Size - Large",
+                        ])
+                      }
+                      className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
+                    >
+                      All Free
+                    </button>
+                    <span className="text-muted-foreground">•</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSizes([])}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {AVAILABLE_SIZES.map((sz) => {
+                    const isSelected = selectedSizes.includes(sz);
+                    return (
+                      <button
+                        key={sz}
+                        type="button"
+                        onClick={() => toggleSize(sz)}
+                        className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-all flex items-center gap-1.5 ${
+                          isSelected
+                            ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                            : "bg-background text-foreground/80 border-border hover:border-indigo-400 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/40"
+                        }`}
+                      >
+                        {isSelected && <Check className="h-3 w-3" />}
+                        <span>{sz}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Select only the sizes made for this dress. Only these will appear in the CeyRaa store under Select Size.
+                </p>
+              </div>
+
               {/* Guidance / Measurement Notes */}
               <div className="space-y-1.5">
                 <Label htmlFor="size-chart-text" className="text-xs font-semibold">

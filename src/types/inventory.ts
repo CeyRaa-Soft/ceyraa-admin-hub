@@ -1,5 +1,18 @@
 import type { ColorVariant } from "./order";
 
+export const AVAILABLE_SIZES = [
+  "XS",
+  "S",
+  "M",
+  "L",
+  "XL",
+  "Free Size",
+  "Free Size - Small",
+  "Free Size - Large",
+] as const;
+
+export type AvailableSize = (typeof AVAILABLE_SIZES)[number];
+
 export type DressCategory = {
   id: string; // e.g., "Short001", "CropTop03", "Dress002"
   name: string; // e.g., "Shorts", "Crop Tops", "Dresses"
@@ -44,6 +57,7 @@ export type Design = {
   sizeChartText?: string | null;
   sizeChartImageUrl?: string | null;
   sizeChartPublicId?: string | null;
+  availableSizes?: string[] | null;
   defaultCollection?: "Queen's Wardrobe" | "King's Wardrobe" | null;
   customCollection?: string | null; // name of custom collection
   offer?: DesignOffer | null;
