@@ -84,8 +84,7 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
   const [swatchPreview, setSwatchPreview] = useState<string | null>(null);
   const [uploadingSwatch, setUploadingSwatch] = useState(false);
 
-  // Video / GIF Showcase State
-  const [uploadingVideo, setUploadingVideo] = useState(false);
+  // Per-Variant Video / GIF State
   const [uploadingVariantVideos, setUploadingVariantVideos] = useState<Record<string, boolean>>({});
 
   // Per-color variant video/GIF upload handler
@@ -267,7 +266,7 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
       setSavingTagging(true);
       await inventoryService.updateDesign(design.id, {
         defaultCollection: defaultCollection as any,
-        customCollection: customCollection || undefined,
+        customCollection: customCollection ? customCollection : (null as any),
       });
 
       setDesign({
@@ -646,106 +645,7 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
     }
   };
 
-  // Video / GIF Showcase Handlers
-  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!design) return;
-    const file = e.target.files?.[0];
-    if (!file) return;
 
-    // Validate type: video/* or image/gif
-    const isVideo = file.type.startsWith("video/");
-    const isGif = file.type === "image/gif";
-
-    if (!isVideo && !isGif) {
-      toast({
-        variant: "destructive",
-        title: "Invalid Media",
-        description: "Please upload an MP4, WebM video, or GIF file.",
-      });
-      e.target.value = "";
-      return;
-    }
-
-    // Validate size: max 25MB
-    if (file.size > 25 * 1024 * 1024) {
-      toast({
-        variant: "destructive",
-        title: "File Too Large",
-        description: "Showcase video or GIF must be smaller than 25MB.",
-      });
-      e.target.value = "";
-      return;
-    }
-
-    try {
-      setUploadingVideo(true);
-      const res = await inventoryService.uploadImage(
-        file,
-        design.code,
-        undefined,
-        "videos"
-      );
-
-      await inventoryService.updateDesign(design.id, {
-        mediaVideoUrl: res.url,
-        mediaVideoPublicId: res.publicId,
-      });
-
-      setDesign({
-        ...design,
-        mediaVideoUrl: res.url,
-        mediaVideoPublicId: res.publicId,
-      });
-
-      toast({
-        title: "Showcase Media Uploaded",
-        description: "Dress showcase video/GIF successfully saved.",
-      });
-    } catch (err: any) {
-      console.error(err);
-      toast({
-        variant: "destructive",
-        title: "Upload Failed",
-        description: err.message || "Failed to upload showcase video/GIF.",
-      });
-    } finally {
-      setUploadingVideo(false);
-      e.target.value = "";
-    }
-  };
-
-  const handleRemoveVideo = async () => {
-    if (!design) return;
-    if (!confirm("Are you sure you want to remove this showcase video/GIF?")) return;
-
-    try {
-      setUploadingVideo(true);
-      await inventoryService.updateDesign(design.id, {
-        mediaVideoUrl: undefined,
-        mediaVideoPublicId: undefined,
-      });
-
-      setDesign({
-        ...design,
-        mediaVideoUrl: undefined,
-        mediaVideoPublicId: undefined,
-      });
-
-      toast({
-        title: "Showcase Media Removed",
-        description: "Showcase video/GIF removed successfully.",
-      });
-    } catch (err: any) {
-      console.error(err);
-      toast({
-        variant: "destructive",
-        title: "Removal Failed",
-        description: err.message || "Failed to remove showcase media.",
-      });
-    } finally {
-      setUploadingVideo(false);
-    }
-  };
 
   // Size Chart Handlers
   const handleSizeChartFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -920,6 +820,11 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
             className="border-primary/30 hover:bg-primary/5 text-foreground"
           >
             <Tag className="mr-2 h-4 w-4 text-primary" /> Collections
+            {design.defaultCollection && (
+              <span className="ml-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                {design.defaultCollection.includes("King") ? "King's" : "Queen's"}
+              </span>
+            )}
             {design.customCollection && (
               <span className="ml-1.5 bg-primary/10 text-primary text-[10px] font-bold px-1.5 py-0.5 rounded">
                 {design.customCollection}
@@ -1298,106 +1203,6 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
           </div>
         )}
 
-        {/* Dress Video / GIF Showcase Section */}
-        <Card className="border border-border/80 shadow-sm bg-card overflow-hidden mt-8">
-          <CardHeader className="bg-muted/15 border-b border-border/40 py-4 px-6 flex flex-row items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10 text-primary">
-                <Video className="h-5 w-5" />
-              </div>
-              <div>
-                <CardTitle className="text-base font-bold text-foreground">
-                  Dress Video or GIF Showcase
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Upload 1 animated video or GIF to showcase dress motion & drape in the client app (Max 25MB).
-                </CardDescription>
-              </div>
-            </div>
-
-            <div className="relative">
-              <input
-                type="file"
-                accept="video/mp4,video/webm,image/gif"
-                id="showcase-media-upload"
-                className="hidden"
-                onChange={handleVideoUpload}
-                disabled={uploadingVideo}
-              />
-              <Button
-                variant={design.mediaVideoUrl ? "outline" : "default"}
-                size="sm"
-                asChild
-                disabled={uploadingVideo}
-                className="h-8 text-xs gap-1.5"
-              >
-                <label htmlFor="showcase-media-upload" className="cursor-pointer">
-                  {uploadingVideo ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Upload className="h-3.5 w-3.5" />
-                  )}
-                  {design.mediaVideoUrl ? "Change Media" : "Upload Video / GIF"}
-                </label>
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="p-6">
-            {design.mediaVideoUrl ? (
-              <div className="flex flex-col md:flex-row gap-6 items-start">
-                <div className="relative max-w-sm w-full aspect-[9/16] sm:aspect-[3/4] rounded-2xl overflow-hidden border border-border/80 bg-black/90 shadow-md">
-                  {design.mediaVideoUrl.match(/\.(gif)(\?.*)?$/i) ? (
-                    <img
-                      src={design.mediaVideoUrl}
-                      alt="Dress GIF showcase"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <video
-                      src={design.mediaVideoUrl}
-                      controls
-                      loop
-                      muted
-                      autoPlay
-                      playsInline
-                      className="w-full h-full object-cover"
-                    />
-                  )}
-                </div>
-
-                <div className="flex-1 space-y-4">
-                  <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-semibold text-sm">
-                    <CheckCircle2 className="h-4 w-4" />
-                    <span>Showcase Media Active</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    This media is ready to be displayed in the client web app as an animated half-screen showcase preview.
-                  </p>
-                  <div className="pt-2">
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={handleRemoveVideo}
-                      disabled={uploadingVideo}
-                      className="gap-1.5"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Remove Video / GIF
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-10 border border-dashed border-border/60 rounded-xl text-muted-foreground text-center px-4">
-                <Video className="h-10 w-10 mb-3 stroke-[1.2] text-muted-foreground/40" />
-                <p className="text-sm font-medium text-foreground/80">No showcase video or GIF uploaded</p>
-                <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-                  Add an MP4, WebM, or GIF loop to give customers a real-life view of how the garment looks and moves.
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
       </div>
 
       {/* Swatch Upload & Adjustment Modal */}
