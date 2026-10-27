@@ -29,6 +29,7 @@ import {
   Tag,
   Percent,
   Layers,
+  Ruler,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
@@ -47,6 +48,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 interface DesignDetailPageProps {
   params: Promise<{ categoryId: string; designId: string }>;
@@ -82,8 +84,128 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
   const [swatchPreview, setSwatchPreview] = useState<string | null>(null);
   const [uploadingSwatch, setUploadingSwatch] = useState(false);
 
-  // Video / GIF Showcase State
-  const [uploadingVideo, setUploadingVideo] = useState(false);
+  // Per-Variant Video / GIF State
+  const [uploadingVariantVideos, setUploadingVariantVideos] = useState<Record<string, boolean>>({});
+
+  // Per-color variant video/GIF upload handler
+  const handleVariantVideoUpload = async (
+    variantIdOrColor: string,
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    if (!design) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const isVideo = file.type.startsWith("video/");
+    const isGif = file.type === "image/gif";
+
+    if (!isVideo && !isGif) {
+      toast({
+        variant: "destructive",
+        title: "Invalid Media",
+        description: "Please upload an MP4, WebM video, or GIF file.",
+      });
+      e.target.value = "";
+      return;
+    }
+
+    if (file.size > 25 * 1024 * 1024) {
+      toast({
+        variant: "destructive",
+        title: "File Too Large",
+        description: "Showcase video or GIF must be smaller than 25MB.",
+      });
+      e.target.value = "";
+      return;
+    }
+
+    try {
+      setUploadingVariantVideos((prev) => ({ ...prev, [variantIdOrColor]: true }));
+      const res = await inventoryService.uploadImage(
+        file,
+        design.code,
+        variantIdOrColor,
+        "videos"
+      );
+
+      const updatedVariants = (design.variants || []).map((v) => {
+        if (v.id === variantIdOrColor || v.color === variantIdOrColor) {
+          return {
+            ...v,
+            mediaVideoUrl: res.url,
+            mediaVideoPublicId: res.publicId,
+          };
+        }
+        return v;
+      });
+
+      await inventoryService.updateDesign(design.id, {
+        variants: updatedVariants,
+      });
+
+      setDesign({
+        ...design,
+        variants: updatedVariants,
+      });
+
+      toast({
+        title: "Variant Media Saved",
+        description: "Color variant video / GIF uploaded successfully.",
+      });
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        variant: "destructive",
+        title: "Upload Failed",
+        description: err.message || "Failed to upload video / GIF.",
+      });
+    } finally {
+      setUploadingVariantVideos((prev) => ({ ...prev, [variantIdOrColor]: false }));
+      e.target.value = "";
+    }
+  };
+
+  const handleRemoveVariantVideo = async (variantIdOrColor: string) => {
+    if (!design) return;
+    if (!confirm("Are you sure you want to remove the video/GIF for this color variant?")) return;
+
+    try {
+      setUploadingVariantVideos((prev) => ({ ...prev, [variantIdOrColor]: true }));
+      const updatedVariants = (design.variants || []).map((v) => {
+        if (v.id === variantIdOrColor || v.color === variantIdOrColor) {
+          return {
+            ...v,
+            mediaVideoUrl: null,
+            mediaVideoPublicId: null,
+          };
+        }
+        return v;
+      });
+
+      await inventoryService.updateDesign(design.id, {
+        variants: updatedVariants,
+      });
+
+      setDesign({
+        ...design,
+        variants: updatedVariants,
+      });
+
+      toast({
+        title: "Variant Media Removed",
+        description: "Color variant video / GIF removed successfully.",
+      });
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        variant: "destructive",
+        title: "Removal Failed",
+        description: err.message || "Failed to remove video / GIF.",
+      });
+    } finally {
+      setUploadingVariantVideos((prev) => ({ ...prev, [variantIdOrColor]: false }));
+    }
+  };
 
   // Collections State
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -96,6 +218,13 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
   const [isOfferOpen, setIsOfferOpen] = useState(false);
   const [discountPercent, setDiscountPercent] = useState<number>(10);
   const [savingOffer, setSavingOffer] = useState(false);
+
+  // Size Chart State
+  const [isSizeChartOpen, setIsSizeChartOpen] = useState(false);
+  const [sizeChartText, setSizeChartText] = useState<string>("");
+  const [sizeChartFile, setSizeChartFile] = useState<File | null>(null);
+  const [sizeChartPreview, setSizeChartPreview] = useState<string | null>(null);
+  const [savingSizeChart, setSavingSizeChart] = useState(false);
 
   const loadData = async () => {
     try {
@@ -111,6 +240,8 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
       if (designData) {
         setDefaultCollection(designData.defaultCollection || "Queen's Wardrobe");
         setCustomCollection(designData.customCollection || "");
+        setSizeChartText(designData.sizeChartText || "");
+        setSizeChartPreview(designData.sizeChartImageUrl || null);
         if (designData.offer?.discountPercentage) {
           setDiscountPercent(designData.offer.discountPercentage);
         }
@@ -135,7 +266,7 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
       setSavingTagging(true);
       await inventoryService.updateDesign(design.id, {
         defaultCollection: defaultCollection as any,
-        customCollection: customCollection || undefined,
+        customCollection: customCollection ? customCollection : (null as any),
       });
 
       setDesign({
@@ -278,7 +409,7 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
       if (design.variants?.length === 1) return true;
       return false;
     }).length;
-    const maxAllowed = 3;
+    const maxAllowed = 5;
     const remainingSlots = maxAllowed - existingCount;
 
     if (remainingSlots <= 0) {
@@ -514,104 +645,124 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
     }
   };
 
-  // Video / GIF Showcase Handlers
-  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!design) return;
+
+
+  // Size Chart Handlers
+  const handleSizeChartFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate type: video/* or image/gif
-    const isVideo = file.type.startsWith("video/");
-    const isGif = file.type === "image/gif";
-
-    if (!isVideo && !isGif) {
+    if (!file.type.startsWith("image/")) {
       toast({
         variant: "destructive",
-        title: "Invalid Media",
-        description: "Please upload an MP4, WebM video, or GIF file.",
+        title: "Invalid File",
+        description: "Please upload an image file (PNG, JPG, WebP).",
       });
-      e.target.value = "";
       return;
     }
 
-    // Validate size: max 25MB
-    if (file.size > 25 * 1024 * 1024) {
+    if (file.size > 5 * 1024 * 1024) {
       toast({
         variant: "destructive",
         title: "File Too Large",
-        description: "Showcase video or GIF must be smaller than 25MB.",
+        description: "Size chart image must be under 5MB.",
       });
-      e.target.value = "";
       return;
     }
 
+    setSizeChartFile(file);
+    setSizeChartPreview(URL.createObjectURL(file));
+  };
+
+  const handleSaveSizeChart = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!design) return;
+
     try {
-      setUploadingVideo(true);
-      const res = await inventoryService.uploadImage(
-        file,
-        design.code,
-        undefined,
-        "videos"
-      );
+      setSavingSizeChart(true);
+      let imageUrl = design.sizeChartImageUrl;
+      let publicId = design.sizeChartPublicId;
+
+      if (sizeChartFile) {
+        const uploadRes = await inventoryService.uploadImage(
+          sizeChartFile,
+          design.code,
+          "size-chart",
+          "size-charts"
+        );
+        imageUrl = uploadRes.url;
+        publicId = uploadRes.publicId;
+      }
 
       await inventoryService.updateDesign(design.id, {
-        mediaVideoUrl: res.url,
-        mediaVideoPublicId: res.publicId,
+        sizeChartText: sizeChartText.trim() || null,
+        sizeChartImageUrl: imageUrl || null,
+        sizeChartPublicId: publicId || null,
       });
 
       setDesign({
         ...design,
-        mediaVideoUrl: res.url,
-        mediaVideoPublicId: res.publicId,
+        sizeChartText: sizeChartText.trim() || null,
+        sizeChartImageUrl: imageUrl || null,
+        sizeChartPublicId: publicId || null,
       });
 
+      setSizeChartFile(null);
+      setIsSizeChartOpen(false);
+
       toast({
-        title: "Showcase Media Uploaded",
-        description: "Dress showcase video/GIF successfully saved.",
+        title: "Size Chart Saved",
+        description: "Size chart guidance and image updated successfully.",
       });
     } catch (err: any) {
       console.error(err);
       toast({
         variant: "destructive",
-        title: "Upload Failed",
-        description: err.message || "Failed to upload showcase video/GIF.",
+        title: "Save Failed",
+        description: err.message || "Failed to update size chart.",
       });
     } finally {
-      setUploadingVideo(false);
-      e.target.value = "";
+      setSavingSizeChart(false);
     }
   };
 
-  const handleRemoveVideo = async () => {
+  const handleRemoveSizeChart = async () => {
     if (!design) return;
-    if (!confirm("Are you sure you want to remove this showcase video/GIF?")) return;
+    if (!confirm("Are you sure you want to remove the size chart guidance and image?")) return;
 
     try {
-      setUploadingVideo(true);
+      setSavingSizeChart(true);
       await inventoryService.updateDesign(design.id, {
-        mediaVideoUrl: undefined,
-        mediaVideoPublicId: undefined,
+        sizeChartText: null,
+        sizeChartImageUrl: null,
+        sizeChartPublicId: null,
       });
 
       setDesign({
         ...design,
-        mediaVideoUrl: undefined,
-        mediaVideoPublicId: undefined,
+        sizeChartText: null,
+        sizeChartImageUrl: null,
+        sizeChartPublicId: null,
       });
 
+      setSizeChartText("");
+      setSizeChartFile(null);
+      setSizeChartPreview(null);
+      setIsSizeChartOpen(false);
+
       toast({
-        title: "Showcase Media Removed",
-        description: "Showcase video/GIF removed successfully.",
+        title: "Size Chart Removed",
+        description: "Size chart removed successfully.",
       });
     } catch (err: any) {
       console.error(err);
       toast({
         variant: "destructive",
         title: "Removal Failed",
-        description: err.message || "Failed to remove showcase media.",
+        description: err.message || "Failed to remove size chart.",
       });
     } finally {
-      setUploadingVideo(false);
+      setSavingSizeChart(false);
     }
   };
 
@@ -669,6 +820,11 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
             className="border-primary/30 hover:bg-primary/5 text-foreground"
           >
             <Tag className="mr-2 h-4 w-4 text-primary" /> Collections
+            {design.defaultCollection && (
+              <span className="ml-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                {design.defaultCollection.includes("King") ? "King's" : "Queen's"}
+              </span>
+            )}
             {design.customCollection && (
               <span className="ml-1.5 bg-primary/10 text-primary text-[10px] font-bold px-1.5 py-0.5 rounded">
                 {design.customCollection}
@@ -687,6 +843,19 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
           >
             <Percent className="mr-1.5 h-4 w-4" />
             {design.offer?.active ? `${design.offer.discountPercentage}% Off Active` : "Make Offer"}
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={() => setIsSizeChartOpen(true)}
+            className="border-indigo-500/30 hover:bg-indigo-50 dark:hover:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400"
+          >
+            <Ruler className="mr-2 h-4 w-4" /> Size Chart
+            {(design.sizeChartText || design.sizeChartImageUrl) && (
+              <span className="ml-1.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                Active
+              </span>
+            )}
           </Button>
 
           <Button onClick={() => setIsEditorOpen(true)}>
@@ -718,7 +887,7 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
             <h2 className="text-xl font-bold font-headline text-foreground">Design Images Library</h2>
           </div>
           <span className="text-xs text-muted-foreground italic">
-            Up to 3 images per color variant
+            Up to 5 images per color variant
           </span>
         </div>
 
@@ -807,7 +976,39 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
                         </span>
                       </Button>
 
-                      {colorImages.length < 3 && (
+                      {/* Per-Color GIF / Video Upload Button */}
+                      <div className="relative">
+                        <input
+                          type="file"
+                          accept="video/mp4,video/webm,image/gif"
+                          id={`video-upload-${variant.id || colorKey}`}
+                          className="hidden"
+                          onChange={(e) => handleVariantVideoUpload(variant.id || colorKey, e)}
+                          disabled={uploadingVariantVideos[variant.id || colorKey]}
+                        />
+                        <Button
+                          variant={variant.mediaVideoUrl ? "secondary" : "outline"}
+                          size="sm"
+                          asChild
+                          disabled={uploadingVariantVideos[variant.id || colorKey]}
+                          className="h-8 text-xs gap-1.5"
+                          title="Upload animated video or GIF for this color"
+                        >
+                          <label htmlFor={`video-upload-${variant.id || colorKey}`} className="cursor-pointer">
+                            {uploadingVariantVideos[variant.id || colorKey] ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Video className="h-3.5 w-3.5 text-purple-500" />
+                            )}
+                            <span className="hidden sm:inline">
+                              {variant.mediaVideoUrl ? "Change GIF/Video" : "Add GIF/Video"}
+                            </span>
+                            <span className="sm:hidden">GIF</span>
+                          </label>
+                        </Button>
+                      </div>
+
+                      {colorImages.length < 5 && (
                         <div className="relative">
                           <input
                             type="file"
@@ -831,51 +1032,91 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
                               ) : (
                                 <Upload className="h-3.5 w-3.5" />
                               )}
-                              Add Photo ({colorImages.length}/3)
+                              Add Photo ({colorImages.length}/5)
                             </label>
                           </Button>
                         </div>
                       )}
                     </div>
                   </CardHeader>
-                  <CardContent className="p-5">
-                    {colorImages.length === 0 ? (
+                  <CardContent className="p-5 space-y-4">
+                    {/* Media grid: Photos + Per-Variant Video/GIF */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                      {/* Photos */}
+                      {colorImages.map((img) => (
+                        <div
+                          key={img.url}
+                          className="relative group aspect-[3/4] rounded-xl overflow-hidden border border-border/80 bg-muted/20 shadow-sm cursor-zoom-in"
+                          onClick={() => setLightboxIndex(img.originalIndex)}
+                        >
+                          <Image
+                            src={img.url}
+                            alt={`${colorKey} variant photo`}
+                            fill
+                            sizes="(max-width: 768px) 50vw, 20vw"
+                            className="object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2.5">
+                            <Button
+                              variant="destructive"
+                              size="icon"
+                              type="button"
+                              className="h-7 w-7 rounded-full ml-auto shadow-md"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveImage(img.originalIndex);
+                              }}
+                              title="Delete photo"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* Per-variant Video / GIF Slot if present */}
+                      {variant.mediaVideoUrl && (
+                        <div className="relative group aspect-[3/4] rounded-xl overflow-hidden border-2 border-purple-500/50 bg-black/90 shadow-md">
+                          {variant.mediaVideoUrl.match(/\.(gif)(\?.*)?$/i) ? (
+                            <img
+                              src={variant.mediaVideoUrl}
+                              alt={`${colorKey} GIF`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <video
+                              src={variant.mediaVideoUrl}
+                              controls
+                              loop
+                              muted
+                              autoPlay
+                              playsInline
+                              className="w-full h-full object-cover"
+                            />
+                          )}
+                          <div className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded-full bg-purple-600/90 text-white text-[10px] font-bold tracking-wider uppercase">
+                            GIF / Video
+                          </div>
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2.5">
+                            <Button
+                              variant="destructive"
+                              size="icon"
+                              type="button"
+                              className="h-7 w-7 rounded-full ml-auto shadow-md"
+                              onClick={() => handleRemoveVariantVideo(variant.id || colorKey)}
+                              title="Remove video/GIF for this color"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {colorImages.length === 0 && !variant.mediaVideoUrl && (
                       <div className="flex flex-col items-center justify-center py-8 border border-dashed border-border/60 rounded-xl text-muted-foreground/60 italic text-sm">
                         <ImageIcon className="h-8 w-8 mb-2 stroke-[1.2] text-muted-foreground/40" />
-                        No photos added for this color variant.
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {colorImages.map((img) => (
-                          <div
-                            key={img.url}
-                            className="relative group aspect-[3/4] rounded-xl overflow-hidden border border-border/80 bg-muted/20 shadow-sm cursor-zoom-in"
-                            onClick={() => setLightboxIndex(img.originalIndex)}
-                          >
-                            <Image
-                              src={img.url}
-                              alt={`${colorKey} variant photo`}
-                              fill
-                              sizes="(max-width: 768px) 50vw, 20vw"
-                              className="object-cover transition-transform duration-300 group-hover:scale-105"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2.5">
-                              <Button
-                                variant="destructive"
-                                size="icon"
-                                type="button"
-                                className="h-7 w-7 rounded-full ml-auto shadow-md"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleRemoveImage(img.originalIndex);
-                                }}
-                                title="Delete photo"
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
+                        No photos or GIF added for this color variant.
                       </div>
                     )}
                   </CardContent>
@@ -962,106 +1203,6 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
           </div>
         )}
 
-        {/* Dress Video / GIF Showcase Section */}
-        <Card className="border border-border/80 shadow-sm bg-card overflow-hidden mt-8">
-          <CardHeader className="bg-muted/15 border-b border-border/40 py-4 px-6 flex flex-row items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10 text-primary">
-                <Video className="h-5 w-5" />
-              </div>
-              <div>
-                <CardTitle className="text-base font-bold text-foreground">
-                  Dress Video or GIF Showcase
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Upload 1 animated video or GIF to showcase dress motion & drape in the client app (Max 25MB).
-                </CardDescription>
-              </div>
-            </div>
-
-            <div className="relative">
-              <input
-                type="file"
-                accept="video/mp4,video/webm,image/gif"
-                id="showcase-media-upload"
-                className="hidden"
-                onChange={handleVideoUpload}
-                disabled={uploadingVideo}
-              />
-              <Button
-                variant={design.mediaVideoUrl ? "outline" : "default"}
-                size="sm"
-                asChild
-                disabled={uploadingVideo}
-                className="h-8 text-xs gap-1.5"
-              >
-                <label htmlFor="showcase-media-upload" className="cursor-pointer">
-                  {uploadingVideo ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Upload className="h-3.5 w-3.5" />
-                  )}
-                  {design.mediaVideoUrl ? "Change Media" : "Upload Video / GIF"}
-                </label>
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="p-6">
-            {design.mediaVideoUrl ? (
-              <div className="flex flex-col md:flex-row gap-6 items-start">
-                <div className="relative max-w-sm w-full aspect-[9/16] sm:aspect-[3/4] rounded-2xl overflow-hidden border border-border/80 bg-black/90 shadow-md">
-                  {design.mediaVideoUrl.match(/\.(gif)(\?.*)?$/i) ? (
-                    <img
-                      src={design.mediaVideoUrl}
-                      alt="Dress GIF showcase"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <video
-                      src={design.mediaVideoUrl}
-                      controls
-                      loop
-                      muted
-                      autoPlay
-                      playsInline
-                      className="w-full h-full object-cover"
-                    />
-                  )}
-                </div>
-
-                <div className="flex-1 space-y-4">
-                  <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-semibold text-sm">
-                    <CheckCircle2 className="h-4 w-4" />
-                    <span>Showcase Media Active</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    This media is ready to be displayed in the client web app as an animated half-screen showcase preview.
-                  </p>
-                  <div className="pt-2">
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={handleRemoveVideo}
-                      disabled={uploadingVideo}
-                      className="gap-1.5"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Remove Video / GIF
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-10 border border-dashed border-border/60 rounded-xl text-muted-foreground text-center px-4">
-                <Video className="h-10 w-10 mb-3 stroke-[1.2] text-muted-foreground/40" />
-                <p className="text-sm font-medium text-foreground/80">No showcase video or GIF uploaded</p>
-                <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-                  Add an MP4, WebM, or GIF loop to give customers a real-life view of how the garment looks and moves.
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
       </div>
 
       {/* Swatch Upload & Adjustment Modal */}
@@ -1416,6 +1557,135 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
                   "Activate Offer"
                 )}
               </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Size Chart Modal */}
+      <Dialog open={isSizeChartOpen} onOpenChange={setIsSizeChartOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <form onSubmit={handleSaveSizeChart}>
+            <DialogHeader>
+              <DialogTitle className="text-lg font-bold font-headline flex items-center gap-2">
+                <Ruler className="h-5 w-5 text-indigo-600" /> Size Chart & Fitting Guide
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                Add dress measurement guidance text and an optional size chart diagram or photo for customers in CeyRaa.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              {/* Guidance / Measurement Notes */}
+              <div className="space-y-1.5">
+                <Label htmlFor="size-chart-text" className="text-xs font-semibold">
+                  Size Guide & Measurement Notes
+                </Label>
+                <Textarea
+                  id="size-chart-text"
+                  rows={4}
+                  value={sizeChartText}
+                  onChange={(e) => setSizeChartText(e.target.value)}
+                  placeholder="e.g. Model is 5'8 wearing size S. Chest: 34'', Waist: 28'', Length: 42''. Fits true to size with a comfortable relaxed drape."
+                  className="text-xs leading-relaxed resize-none"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Text instructions, fit notes, model height, or measurement points displayed on the sidebar.
+                </p>
+              </div>
+
+              {/* Size Chart Image Upload */}
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold">Size Chart Image / Diagram</Label>
+                {sizeChartPreview ? (
+                  <div className="relative rounded-xl overflow-hidden border border-border/80 bg-muted/20 p-2 space-y-2">
+                    <div className="relative aspect-[4/3] w-full rounded-lg overflow-hidden bg-black/50">
+                      <img
+                        src={sizeChartPreview}
+                        alt="Size chart preview"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-muted-foreground truncate">
+                        {sizeChartFile ? sizeChartFile.name : "Current Size Chart Image"}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSizeChartFile(null);
+                          setSizeChartPreview(null);
+                        }}
+                        className="text-destructive h-7 text-xs hover:text-destructive"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove Photo
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="border border-dashed border-border/80 rounded-xl p-5 text-center bg-muted/10 hover:bg-muted/20 transition-colors">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      id="size-chart-file"
+                      className="hidden"
+                      onChange={handleSizeChartFileChange}
+                    />
+                    <label htmlFor="size-chart-file" className="cursor-pointer block space-y-2">
+                      <div className="w-10 h-10 rounded-full bg-indigo-500/10 text-indigo-600 flex items-center justify-center mx-auto">
+                        <Upload className="h-5 w-5" />
+                      </div>
+                      <div className="text-xs font-semibold text-foreground">
+                        Upload Size Chart Image
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        PNG, JPG or WebP up to 5MB. Measurement table or garment dimension graphic.
+                      </p>
+                    </label>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <DialogFooter className="flex items-center justify-between sm:justify-between w-full">
+              {(design.sizeChartText || design.sizeChartImageUrl) ? (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleRemoveSizeChart}
+                  disabled={savingSizeChart}
+                  className="text-xs"
+                >
+                  Clear Guide
+                </Button>
+              ) : <div />}
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsSizeChartOpen(false)}
+                  disabled={savingSizeChart}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={savingSizeChart}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                >
+                  {savingSizeChart ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...
+                    </>
+                  ) : (
+                    "Save Size Chart"
+                  )}
+                </Button>
+              </div>
             </DialogFooter>
           </form>
         </DialogContent>

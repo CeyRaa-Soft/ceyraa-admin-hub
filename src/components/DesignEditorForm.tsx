@@ -22,7 +22,7 @@ import {
 import { Loader2, Upload, X, Image as ImageIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { inventoryService } from "@/services/inventory.service";
-import type { DressCategory, Design, DesignImage } from "@/types/inventory";
+import type { DressCategory, Design, DesignImage, Collection } from "@/types/inventory";
 import type { ColorVariant } from "@/types/order";
 import { GarmentVariantsEditor } from "@/components/GarmentVariantsEditor";
 import Image from "next/image";
@@ -48,6 +48,9 @@ export function DesignEditorForm({
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [selectedCatId, setSelectedCatId] = useState("");
+  const [defaultCollection, setDefaultCollection] = useState<"Queen's Wardrobe" | "King's Wardrobe">("Queen's Wardrobe");
+  const [customCollection, setCustomCollection] = useState<string>("");
+  const [collectionsList, setCollectionsList] = useState<Collection[]>([]);
   const [variants, setVariants] = useState<ColorVariant[]>([]);
   const [images, setImages] = useState<DesignImage[]>([]);
   
@@ -58,16 +61,25 @@ export function DesignEditorForm({
   // Reset or fill form when design changes or modal opens
   useEffect(() => {
     if (open) {
+      inventoryService
+        .getAllCollections()
+        .then((colls) => setCollectionsList(colls || []))
+        .catch(() => setCollectionsList([]));
+
       if (design) {
         setName(design.name);
         setCode(design.code);
         setSelectedCatId(design.categoryId);
+        setDefaultCollection((design.defaultCollection as any) || "Queen's Wardrobe");
+        setCustomCollection(design.customCollection || "");
         setVariants(design.variants || []);
         setImages(design.images || []);
       } else {
         setName("");
         setCode("");
         setSelectedCatId(categoryId || (categories[0]?.id || ""));
+        setDefaultCollection("Queen's Wardrobe");
+        setCustomCollection("");
         setVariants([]);
         setImages([]);
       }
@@ -129,7 +141,7 @@ export function DesignEditorForm({
       if (effectiveVariants.length === 1) return true;
       return false;
     }).length;
-    const maxAllowed = 3;
+    const maxAllowed = 5;
     const remainingSlots = maxAllowed - existingCount;
 
     if (remainingSlots <= 0) {
@@ -230,11 +242,13 @@ export function DesignEditorForm({
         };
       });
 
-      const payload = {
+      const payload: any = {
         name: name.trim(),
         categoryId: selectedCatId,
         variants: sanitizedVariants,
         images: sanitizedImages,
+        defaultCollection,
+        customCollection: customCollection ? customCollection : null,
       };
 
       if (design) {
@@ -313,6 +327,50 @@ export function DesignEditorForm({
             />
           </div>
 
+          {/* Default Collection & Custom Collection */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="design-default-collection" className="text-xs font-semibold">
+                Default Collection <span className="text-destructive">*</span>
+              </Label>
+              <select
+                id="design-default-collection"
+                value={defaultCollection}
+                onChange={(e) => setDefaultCollection(e.target.value as any)}
+                className="w-full h-10 px-3 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                required
+              >
+                <option value="Queen's Wardrobe">Queen&apos;s Wardrobe</option>
+                <option value="King's Wardrobe">King&apos;s Wardrobe</option>
+              </select>
+              <p className="text-[11px] text-muted-foreground">
+                Required primary balcony collection.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="design-custom-collection" className="text-xs font-semibold">
+                Custom Collection (Optional)
+              </Label>
+              <select
+                id="design-custom-collection"
+                value={customCollection}
+                onChange={(e) => setCustomCollection(e.target.value)}
+                className="w-full h-10 px-3 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">-- None / No Custom Collection --</option>
+                {collectionsList.map((c) => (
+                  <option key={c.id} value={c.name}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-muted-foreground">
+                Optional custom collection (e.g. Wet Look, Summer).
+              </p>
+            </div>
+          </div>
+
           {/* Variants and Quantities section */}
           <div className="space-y-3 pt-2 border-t border-border/60">
             <h4 className="font-semibold text-sm text-foreground">Colors & Sizes Configuration</h4>
@@ -350,7 +408,7 @@ export function DesignEditorForm({
                             Color: <span className="text-primary">{colorKey}</span>
                           </span>
                           
-                          {colorImages.length < 3 && (
+                          {colorImages.length < 5 && (
                             <div className="relative">
                               <input
                                 type="file"

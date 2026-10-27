@@ -9,6 +9,8 @@ export type ColorVariant = {
   color: string;
   swatchUrl?: string;
   swatchPublicId?: string;
+  mediaVideoUrl?: string | null;
+  mediaVideoPublicId?: string | null;
   sizes: SizeInfo[];
 };
 
