@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus, Trash2 } from "lucide-react";
 import type { ColorVariant, SizeInfo } from "@/types/order";
+import { AVAILABLE_SIZES } from "@/types/inventory";
 
 interface GarmentVariantsEditorProps {
   variants: ColorVariant[];
@@ -98,6 +99,30 @@ export const GarmentVariantsEditor: React.FC<GarmentVariantsEditorProps> = ({
     onChange(updated);
   };
 
+  const handleQuickAddSize = (variantIndex: number, sizeName: string) => {
+    const variant = variants[variantIndex];
+    if (!variant) return;
+    const exists = variant.sizes.some(
+      (s) => s.size.trim().toLowerCase() === sizeName.trim().toLowerCase()
+    );
+    if (exists) return;
+
+    const basePrice = variant.sizes[0]?.unitPrice || 0;
+    const updated = variants.map((v, vIdx) => {
+      if (vIdx === variantIndex) {
+        return {
+          ...v,
+          sizes: [
+            ...v.sizes,
+            { size: sizeName, quantity: 0, unitPrice: basePrice },
+          ],
+        };
+      }
+      return v;
+    });
+    onChange(updated);
+  };
+
   return (
     <div className="space-y-4">
       {variants.map((variant, vIndex) => (
@@ -124,7 +149,32 @@ export const GarmentVariantsEditor: React.FC<GarmentVariantsEditorProps> = ({
           </div>
 
           <div className="space-y-2.5 pl-3 border-l-2 border-primary/20">
-            <Label className="text-xs font-semibold text-muted-foreground block">Sizes & Stock Levels</Label>
+            <div className="flex flex-wrap items-center justify-between gap-1">
+              <Label className="text-xs font-semibold text-muted-foreground block">Sizes & Stock Levels</Label>
+              <div className="flex flex-wrap items-center gap-1">
+                <span className="text-[10px] text-muted-foreground mr-1">Quick Add:</span>
+                {AVAILABLE_SIZES.map((sz) => {
+                  const isAdded = variant.sizes.some(
+                    (s) => s.size.trim().toLowerCase() === sz.trim().toLowerCase()
+                  );
+                  return (
+                    <button
+                      key={sz}
+                      type="button"
+                      onClick={() => handleQuickAddSize(vIndex, sz)}
+                      disabled={isAdded}
+                      className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
+                        isAdded
+                          ? "opacity-40 border-dashed cursor-not-allowed bg-muted text-muted-foreground"
+                          : "hover:bg-primary/10 hover:border-primary text-foreground border-border"
+                      }`}
+                    >
+                      +{sz}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             {variant.sizes.map((size, sIndex) => (
               <div key={sIndex} className="flex items-center gap-3">
                 <div className="flex-1 min-w-[70px]">
