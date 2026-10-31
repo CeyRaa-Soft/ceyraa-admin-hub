@@ -291,20 +291,21 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
 
     try {
       setSavingTagging(true);
+      const effectiveWardrobe = category?.wardrobeType || design.defaultCollection || "Queen's Wardrobe";
       await inventoryService.updateDesign(design.id, {
-        defaultCollection: defaultCollection as any,
+        defaultCollection: effectiveWardrobe as any,
         customCollection: customCollection ? customCollection : (null as any),
       });
 
       setDesign({
         ...design,
-        defaultCollection: defaultCollection as any,
+        defaultCollection: effectiveWardrobe as any,
         customCollection: customCollection || undefined,
       });
 
       toast({
-        title: "Collections Updated",
-        description: "Design collections tagging saved successfully.",
+        title: "Collection Updated",
+        description: "Design custom collection saved successfully.",
       });
       setIsTaggingOpen(false);
     } catch (err: any) {
@@ -1428,32 +1429,20 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
           <form onSubmit={handleSaveTagging}>
             <DialogHeader>
               <DialogTitle className="text-lg font-bold font-headline flex items-center gap-2">
-                <Tag className="h-5 w-5 text-primary" /> Assign Collections
+                <Tag className="h-5 w-5 text-primary" /> Assign Custom Collection
               </DialogTitle>
               <DialogDescription className="text-xs">
-                Configure default collection and custom collection for this dress.
+                Attach this piece to a curated seasonal drop or custom capsule collection.
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4 py-4">
-              {/* Default Collection */}
-              <div className="space-y-1.5">
-                <Label htmlFor="default-collection" className="text-xs font-semibold">
-                  Default Collection <span className="text-destructive">*</span>
-                </Label>
-                <select
-                  id="default-collection"
-                  value={defaultCollection}
-                  onChange={(e) => setDefaultCollection(e.target.value)}
-                  className="w-full h-10 px-3 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                  required
-                >
-                  <option value="Queen's Wardrobe">Queen&apos;s Wardrobe</option>
-                  <option value="King's Wardrobe">King&apos;s Wardrobe</option>
-                </select>
-                <p className="text-[11px] text-muted-foreground">
-                  The primary category in the CeyRaa client balcony.
-                </p>
+              {/* Inherited Wardrobe Type Info */}
+              <div className="p-3 rounded-xl bg-muted/40 border border-border/60 flex items-center justify-between text-xs">
+                <span className="text-muted-foreground font-medium">Department / Wardrobe:</span>
+                <span className="font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary">
+                  {category?.wardrobeType || design.defaultCollection || "Queen's Wardrobe"}
+                </span>
               </div>
 
               {/* Custom Collection */}
@@ -1475,7 +1464,7 @@ export default function DesignDetailPage({ params }: DesignDetailPageProps) {
                   ))}
                 </select>
                 <p className="text-[11px] text-muted-foreground">
-                  Dynamic collection created in the Admin Hub Collections section.
+                  Thematic collection created in Admin Hub Collections (e.g. Summer Elegance).
                 </p>
               </div>
             </div>

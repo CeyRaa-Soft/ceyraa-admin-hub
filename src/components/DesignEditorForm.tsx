@@ -242,12 +242,15 @@ export function DesignEditorForm({
         };
       });
 
+      const currentCat = categories.find((c) => c.id === selectedCatId);
+      const effectiveWardrobe = currentCat?.wardrobeType || (design?.defaultCollection as any) || defaultCollection || "Queen's Wardrobe";
+
       const payload: any = {
         name: name.trim(),
         categoryId: selectedCatId,
         variants: sanitizedVariants,
         images: sanitizedImages,
-        defaultCollection,
+        defaultCollection: effectiveWardrobe,
         customCollection: customCollection ? customCollection : null,
       };
 
@@ -317,34 +320,24 @@ export function DesignEditorForm({
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="design-category">Dress Category</Label>
-            <Input
-              id="design-category"
-              value={categories.find((c) => c.id === selectedCatId)?.name || ""}
-              disabled
-              className="bg-muted text-muted-foreground font-semibold"
-            />
-          </div>
-
-          {/* Default Collection & Custom Collection */}
+          {/* Category & Custom Collection */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label htmlFor="design-default-collection" className="text-xs font-semibold">
-                Default Collection <span className="text-destructive">*</span>
-              </Label>
-              <select
-                id="design-default-collection"
-                value={defaultCollection}
-                onChange={(e) => setDefaultCollection(e.target.value as any)}
-                className="w-full h-10 px-3 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                required
-              >
-                <option value="Queen's Wardrobe">Queen&apos;s Wardrobe</option>
-                <option value="King's Wardrobe">King&apos;s Wardrobe</option>
-              </select>
+              <Label htmlFor="design-category">Dress Category</Label>
+              {(() => {
+                const curCat = categories.find((c) => c.id === selectedCatId);
+                const wType = curCat?.wardrobeType || design?.defaultCollection || "Queen's Wardrobe";
+                return (
+                  <Input
+                    id="design-category"
+                    value={curCat ? `${curCat.name} (${wType})` : ""}
+                    disabled
+                    className="bg-muted text-muted-foreground font-semibold"
+                  />
+                );
+              })()}
               <p className="text-[11px] text-muted-foreground">
-                Required primary balcony collection.
+                Wardrobe type is inherited directly from the category.
               </p>
             </div>
 
@@ -366,7 +359,7 @@ export function DesignEditorForm({
                 ))}
               </select>
               <p className="text-[11px] text-muted-foreground">
-                Optional custom collection (e.g. Wet Look, Summer).
+                Optional custom collection (e.g. Summer Elegance).
               </p>
             </div>
           </div>
