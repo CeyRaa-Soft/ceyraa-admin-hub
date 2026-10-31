@@ -3,13 +3,15 @@ import type { DressCategory, Design, DesignImage } from "@/types/inventory";
 
 export const inventoryService = {
   // Categories
-  getAllCategories: () =>
-    apiClient.get<DressCategory[]>("/api/dress-categories"),
+  getAllCategories: (wardrobeType?: string) =>
+    apiClient.get<DressCategory[]>(
+      wardrobeType ? `/api/dress-categories?wardrobeType=${encodeURIComponent(wardrobeType)}` : "/api/dress-categories"
+    ),
 
   getCategoryById: (id: string) =>
     apiClient.get<DressCategory>(`/api/dress-categories/${id}`),
 
-  createCategory: (payload: { name: string; prefix?: string }) =>
+  createCategory: (payload: { name: string; prefix?: string; wardrobeType?: "Queen's Wardrobe" | "King's Wardrobe" }) =>
     apiClient.post<DressCategory>("/api/dress-categories", payload),
 
   updateCategory: (id: string, payload: Partial<DressCategory>) =>

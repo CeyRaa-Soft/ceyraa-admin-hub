@@ -26,7 +26,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { PlusCircle, Boxes, Loader2, MoreVertical, FilePen, Trash2, FolderHeart } from "lucide-react";
+import { PlusCircle, Boxes, Loader2, MoreVertical, FilePen, Trash2, FolderHeart, Crown, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 import { inventoryService } from "@/services/inventory.service";
@@ -44,12 +44,14 @@ export default function InventoryPage() {
   const { toast } = useToast();
   const [categories, setCategories] = useState<DressCategory[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeWardrobe, setActiveWardrobe] = useState<"Queen's Wardrobe" | "King's Wardrobe">("Queen's Wardrobe");
 
   // Category Dialog States
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<DressCategory | null>(null);
   const [catName, setCatName] = useState("");
   const [catPrefix, setCatPrefix] = useState("");
+  const [catWardrobe, setCatWardrobe] = useState<"Queen's Wardrobe" | "King's Wardrobe">("Queen's Wardrobe");
   const [saving, setSaving] = useState(false);
 
   const loadCategories = async () => {
@@ -78,9 +80,11 @@ export default function InventoryPage() {
     if (cat) {
       setCatName(cat.name);
       setCatPrefix(cat.prefix);
+      setCatWardrobe(cat.wardrobeType || "Queen's Wardrobe");
     } else {
       setCatName("");
       setCatPrefix("");
+      setCatWardrobe(activeWardrobe);
     }
     setIsDialogOpen(true);
   };
@@ -102,6 +106,7 @@ export default function InventoryPage() {
         await inventoryService.updateCategory(editingCategory.id, {
           name: catName.trim(),
           prefix: catPrefix.trim().toUpperCase() || undefined,
+          wardrobeType: catWardrobe,
         });
         toast({
           title: "Category Updated",
@@ -112,10 +117,11 @@ export default function InventoryPage() {
         const created = await inventoryService.createCategory({
           name: catName.trim(),
           prefix: catPrefix.trim().toUpperCase() || undefined,
+          wardrobeType: catWardrobe,
         });
         toast({
           title: "Category Created",
-          description: `Category "${created.name}" created with ID: ${created.id}.`,
+          description: `Category "${created.name}" created under ${created.wardrobeType || catWardrobe}.`,
         });
       }
       setIsDialogOpen(false);
@@ -158,6 +164,16 @@ export default function InventoryPage() {
     }
   };
 
+  const queensCategories = categories.filter(
+    (c) => (c.wardrobeType || "Queen's Wardrobe") === "Queen's Wardrobe"
+  );
+  const kingsCategories = categories.filter(
+    (c) => c.wardrobeType === "King's Wardrobe"
+  );
+
+  const displayedCategories =
+    activeWardrobe === "King's Wardrobe" ? kingsCategories : queensCategories;
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-muted-foreground animate-pulse">
@@ -169,11 +185,11 @@ export default function InventoryPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold font-headline">Inventory Categories</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage dress categories and explore garment designs.
+            Organize clothing categories and manage designs under Queen&apos;s and King&apos;s Wardrobes.
           </p>
         </div>
         <Button onClick={() => handleOpenDialog()}>
@@ -181,20 +197,87 @@ export default function InventoryPage() {
         </Button>
       </div>
 
-      {categories.length === 0 ? (
+      {/* Wardrobe Type Switcher */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <button
+          type="button"
+          onClick={() => setActiveWardrobe("Queen's Wardrobe")}
+          className={`p-4 rounded-2xl border text-left transition-all flex items-center justify-between ${
+            activeWardrobe === "Queen's Wardrobe"
+              ? "bg-purple-500/10 border-purple-500/50 shadow-md ring-2 ring-purple-500/20"
+              : "bg-card border-border/70 hover:border-purple-500/30 hover:bg-muted/30"
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div className={`p-2.5 rounded-xl ${
+              activeWardrobe === "Queen's Wardrobe" ? "bg-purple-500 text-white" : "bg-muted text-muted-foreground"
+            }`}>
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="font-headline font-semibold text-base text-foreground flex items-center gap-1.5">
+                <span>Queen&apos;s Wardrobe</span>
+                {activeWardrobe === "Queen's Wardrobe" && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-300">
+                    Active
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">Women&apos;s dresses, tops, and evening wear</p>
+            </div>
+          </div>
+          <span className="font-mono text-sm font-semibold px-2.5 py-1 rounded-lg bg-background border border-border/80">
+            {queensCategories.length} {queensCategories.length === 1 ? "Category" : "Categories"}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveWardrobe("King's Wardrobe")}
+          className={`p-4 rounded-2xl border text-left transition-all flex items-center justify-between ${
+            activeWardrobe === "King's Wardrobe"
+              ? "bg-amber-500/10 border-amber-500/50 shadow-md ring-2 ring-amber-500/20"
+              : "bg-card border-border/70 hover:border-amber-500/30 hover:bg-muted/30"
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div className={`p-2.5 rounded-xl ${
+              activeWardrobe === "King's Wardrobe" ? "bg-amber-600 text-white" : "bg-muted text-muted-foreground"
+            }`}>
+              <Crown className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="font-headline font-semibold text-base text-foreground flex items-center gap-1.5">
+                <span>King&apos;s Wardrobe</span>
+                {activeWardrobe === "King's Wardrobe" && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-300">
+                    Active
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">Men&apos;s shirts, trousers, and tailoring</p>
+            </div>
+          </div>
+          <span className="font-mono text-sm font-semibold px-2.5 py-1 rounded-lg bg-background border border-border/80">
+            {kingsCategories.length} {kingsCategories.length === 1 ? "Category" : "Categories"}
+          </span>
+        </button>
+      </div>
+
+      {displayedCategories.length === 0 ? (
         <Card className="p-12 text-center flex flex-col items-center justify-center border-dashed">
           <Boxes className="h-12 w-12 text-muted-foreground/40 mb-4" />
-          <h3 className="text-xl font-semibold mb-2">No categories found</h3>
+          <h3 className="text-xl font-semibold mb-2">No categories found in {activeWardrobe}</h3>
           <p className="text-muted-foreground mb-6">
-            Create your first category to start organizing your designs.
+            Create your first category in {activeWardrobe} to organize garments.
           </p>
           <Button onClick={() => handleOpenDialog()}>
-            <PlusCircle className="mr-2 h-4 w-4" /> Create Category
+            <PlusCircle className="mr-2 h-4 w-4" /> Create Category in {activeWardrobe.includes("King") ? "King's" : "Queen's"}
           </Button>
         </Card>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 animate-in fade-in duration-300">
-          {categories.map((category, index) => {
+          {displayedCategories.map((category, index) => {
             const gradient = GRADIENTS[index % GRADIENTS.length];
             return (
               <div key={category.id} className="group relative">
@@ -202,8 +285,11 @@ export default function InventoryPage() {
                   <Card className={`h-48 overflow-hidden transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1.5 bg-gradient-to-br ${gradient} border flex flex-col justify-between`}>
                     <CardHeader className="pb-2">
                       <div className="flex justify-between items-start">
-                        <div className="p-2.5 rounded-lg bg-background/60 shadow-sm border border-border/20 text-primary">
+                        <div className="p-2.5 rounded-lg bg-background/60 shadow-sm border border-border/20 text-primary flex items-center gap-2">
                           <FolderHeart className="h-5 w-5" />
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                            {category.wardrobeType && category.wardrobeType.includes("King") ? "King's" : "Queen's"}
+                          </span>
                         </div>
                         {/* Dropdown Menu - Stop click propagation to prevent link click */}
                         <div onClick={(e) => e.preventDefault()} className="relative z-10">
@@ -255,8 +341,8 @@ export default function InventoryPage() {
             <Card className="flex items-center justify-center border-2 border-dashed border-border/80 hover:border-primary/60 hover:shadow-md transition-all duration-300 min-h-[192px] h-full bg-card">
               <div className="text-center p-6">
                 <PlusCircle className="mx-auto h-10 w-10 text-muted-foreground transition-colors group-hover:text-primary" />
-                <p className="mt-2 text-sm font-semibold group-hover:text-primary transition-colors">Create New Category</p>
-                <p className="text-xs text-muted-foreground mt-1">Add a new clothing type</p>
+                <p className="mt-2 text-sm font-semibold group-hover:text-primary transition-colors">Create Category</p>
+                <p className="text-xs text-muted-foreground mt-1">Add to {activeWardrobe.includes("King") ? "King's" : "Queen's"}</p>
               </div>
             </Card>
           </button>
@@ -275,10 +361,23 @@ export default function InventoryPage() {
 
           <div className="space-y-4 py-4">
             <div className="space-y-1.5">
+              <Label htmlFor="category-wardrobe">Wardrobe Type <span className="text-destructive">*</span></Label>
+              <select
+                id="category-wardrobe"
+                value={catWardrobe}
+                onChange={(e) => setCatWardrobe(e.target.value as any)}
+                className="w-full h-10 px-3 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="Queen's Wardrobe">Queen&apos;s Wardrobe (Women)</option>
+                <option value="King's Wardrobe">King&apos;s Wardrobe (Men)</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
               <Label htmlFor="category-name">Category Name <span className="text-destructive">*</span></Label>
               <Input
                 id="category-name"
-                placeholder="e.g. Crop Tops, Shorts, Dresses"
+                placeholder="e.g. Crop Tops, Shorts, Dresses, Shirts"
                 value={catName}
                 onChange={(e) => setCatName(e.target.value)}
               />
